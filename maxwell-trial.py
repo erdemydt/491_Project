@@ -21,6 +21,7 @@
 # ------------------------------------------------------------
 
 from __future__ import annotations
+import datetime
 import math
 import numpy as np
 from dataclasses import dataclass
@@ -103,7 +104,8 @@ def build_R(DeltaE: float, Th: float, Tc: float, gamma: float, kB: float = 1.0) 
 
 def compute_U(R: np.ndarray, tau: float) -> np.ndarray:
     """Matrix exponential U = exp(R * tau)"""
-    return expm(R * tau)
+    U = expm(R * tau)
+    return U
 
 def sample_categorical(probs: np.ndarray, rng: np.random.Generator) -> int:
     probs = np.clip(probs, 0.0, 1.0)
@@ -173,20 +175,17 @@ def make_reservoir(label: str, temp_text: str, width=2.8, height=1.6, color=GREY
     temp = Text(temp_text).scale(0.4).next_to(group, DOWN, buff=0.1)
     return VGroup(group, text, temp)
 
-def make_demon(joint_state: str = "0u"):
-    # A circle with joint state (e.g., "0u", "1d") inside
-    # If only single char passed (legacy), assume bit=0
-    if len(joint_state) == 1:
-        joint_state = "0" + joint_state
+def make_demon(demon_state: str = "u"):
+    # A circle with demon state (u/d) inside
+    # Extract demon state if joint state is passed
+    if len(demon_state) > 1:
+        demon_state = demon_state[1]  # Extract demon part from joint state
     
-    bit_val = joint_state[0]
-    demon_val = joint_state[1]
-    color = JOINT_STATE_COLOR.get(joint_state, YELLOW)
+    color = DEMON_COLOR.get(demon_state, YELLOW)
     
     circ = Circle(radius=0.4, color=color, fill_opacity=0.25, stroke_width=4)
-    # Show joint state as "bit|demon" for clarity
-    state_text = f"{bit_val}|{demon_val}"
-    letter = Text(state_text, weight="BOLD").scale(0.5).set_color(color)
+    # Show only demon state
+    letter = Text(demon_state, weight="BOLD").scale(0.6).set_color(color)
     
     # Add demon label
     demon_label = Text("DEMON", weight="BOLD").scale(0.3).next_to(circ, UP, buff=0.15)
@@ -194,20 +193,17 @@ def make_demon(joint_state: str = "0u"):
     mob = VGroup(circ, letter, demon_label)
     return mob
 
-def update_demon(mob: VGroup, joint_state: str):
-    # Handle joint state updates
-    if len(joint_state) == 1:
-        joint_state = "0" + joint_state
+def update_demon(mob: VGroup, demon_state: str):
+    # Handle demon state updates (extract demon part if joint state passed)
+    if len(demon_state) > 1:
+        demon_state = demon_state[1]  # Extract demon part from joint state
     
-    bit_val = joint_state[0]
-    demon_val = joint_state[1]
-    color = JOINT_STATE_COLOR.get(joint_state, YELLOW)
-    state_text = f"{bit_val}|{demon_val}"
+    color = DEMON_COLOR.get(demon_state, YELLOW)
     
     circ, letter, label = mob
     circ.set_stroke(color)
     circ.set_fill(color, opacity=0.25)
-    letter.become(Text(state_text, weight="BOLD").scale(0.5).set_color(color))
+    letter.become(Text(demon_state, weight="BOLD").scale(0.6).set_color(color))
     return mob
 
 def make_bit(bit_val: int):
@@ -217,8 +213,11 @@ def make_bit(bit_val: int):
 
 def recolor_bit(bit_mob: VGroup, new_val: int):
     sq, t = bit_mob
+    old_pos = t.get_center()  # Preserve position
     sq.set_stroke(BIT_COLOR[new_val]).set_fill(BIT_COLOR[new_val], opacity=0.15)
-    t.become(Text(str(new_val), weight="BOLD").scale(0.4).set_color(BIT_COLOR[new_val]))
+    new_text = Text(str(new_val), weight="BOLD").scale(0.4).set_color(BIT_COLOR[new_val])
+    new_text.move_to(old_pos)  # Keep text in same position
+    t.become(new_text)
     return bit_mob
 
 def energy_arrow(start, end, direction: str = "c2d"):
@@ -242,8 +241,8 @@ class MaxwellDemonBitTape(Scene):
     def construct(self):
         # ---------- Parameters ----------
         P = SimParams(
-            DeltaE=1.0, Th=1.6, Tc=1.2, gamma=1.0, tau=0.8,
-            p0=0.95, N=100, seed=7
+            DeltaE=1.5, Th=1.35, Tc=1.2, gamma=1.0, tau=0.8,
+            p0=0.95, N=10, seed=datetime.datetime.now().microsecond
         )
         rng = np.random.default_rng(P.seed)
         deriv = P.derived()
@@ -254,8 +253,7 @@ class MaxwellDemonBitTape(Scene):
         R, meta = build_R(P.DeltaE, P.Th, P.Tc, P.gamma, P.kB)
         sigma = meta["sigma"]  # Extract sigma for display
         U = compute_U(R, P.tau)
-        print("Rate matrix R:\n", R)
-        print("Transition matrix U:\n", U)
+
         # ---------- Static Layout ----------
         # Positions
         x_left = -5.8
@@ -266,7 +264,7 @@ class MaxwellDemonBitTape(Scene):
         cold = make_reservoir("COLD", f"Tc = {P.Tc:.2f}", color=RES_COLD_COLOR).scale(0.9).to_edge(LEFT).shift(UP*1.2)
         hot = make_reservoir("HOT", f"Th = {P.Th:.2f}", color=RES_HOT_COLOR).scale(0.9).to_edge(RIGHT).shift(UP*1.2)
 
-        demon = make_demon("0u").move_to(ORIGIN + UP*0.2)
+        demon = make_demon("u").move_to(ORIGIN + UP*0.2)
 
         # Labels (ε, δ, and σ) - positioned to fit screen
         info_text = VGroup(
@@ -298,11 +296,13 @@ class MaxwellDemonBitTape(Scene):
                 Text("Q_c→h total:").scale(0.45).set_color(GOLD), q,
                 Text("δ_out:").scale(0.45), dout
             ).arrange_in_grid(rows=5, cols=2, buff=0.12, col_alignments="lr")
-            box = VGroup(labels).arrange(DOWN, buff=0.15)
+            # Set position relative to demon
+            box = VGroup(labels).arrange( buff=0.15).next_to(demon, DOWN*1.2, buff=1.2)
             return box
 
         scoreboard = always_redraw(make_score)
-        scoreboard.to_corner(UR).shift(DOWN*0.3 + LEFT*0.2)
+        scoreboard.next_to(demon, DOWN*1.2, buff=1.2)
+        # Position scoreboard above demon
 
         # Tape baseline
         baseline = Line([x_left, y_tape, 0], [x_right, y_tape, 0], color=LIGHT_GREY, stroke_width=2)
@@ -323,9 +323,10 @@ class MaxwellDemonBitTape(Scene):
         self.wait(0.1)
 
         # ---------- Simulation State ----------
-        # Demon initial joint state (bit=0, demon=d as starting point)
-        current_joint_state = "0d"  # Start with bit 0, demon down
-        update_demon(demon, current_joint_state)
+        # Demon initial state
+        current_demon_state = "u"  # Start with demon up
+        current_joint_state = "0u"  # Track joint state for physics
+        # Demon visual already shows 'u' from initialization
 
         # Counters
         n_proc = 0
@@ -367,41 +368,115 @@ class MaxwellDemonBitTape(Scene):
             
             energy_arrows = []
             demon_center = demon.get_center()
-            
+            bit_center = bit_mob.get_center()
             # Check for cooperative transition 0d <-> 1u (COLD bath only)
             if initial_joint == "0d" and final_joint_state == "1u":
                 # 0d -> 1u: cooperative transition via COLD bath
                 count_01 += 1
                 arrow = energy_arrow(cold_point, demon_center, "c2d")
+                arrow2 = energy_arrow(cold_point, bit_center, "d2c")
+                arrow.set_color(RES_HOT_COLOR)
+                arrow2.set_color(RES_HOT_COLOR)
+                energy_arrows.append(arrow2)
                 energy_arrows.append(arrow)
             elif initial_joint == "1u" and final_joint_state == "0d":
                 # 1u -> 0d: cooperative transition via COLD bath  
                 count_10 += 1
                 arrow = energy_arrow(demon_center, cold_point, "d2c")
+                arrow2 = energy_arrow(bit_center, cold_point, "c2d")
+                arrow.set_color(RES_HOT_COLOR)
+                arrow2.set_color(RES_HOT_COLOR)
+                energy_arrows.append(arrow2)
                 energy_arrows.append(arrow)
+            elif initial_joint == "0u" and final_joint_state == "1d":
+                # 0u -> 1d: intrinsic demon transition with bit flip (HOT bath AND COLD bath, energy taken from cold, dumped to hot, at once)
+                count_01 += 1
+                arrow_c2d = energy_arrow(cold_point, bit_center, "c2d")
+                arrow_d2h = energy_arrow(demon_center, hot_point, "d2h")
+                arrow_c2d.set_color(RES_COLD_COLOR)
+                arrow_d2h.set_color(RES_HOT_COLOR)
+                energy_arrows.append(arrow_c2d)
+                energy_arrows.append(arrow_d2h)
+            elif initial_joint == "1u" and final_joint_state == "0u":
+                # 1u -> 0u: intrinsic demon transition with bit flip (HOT bath AND COLD bath, energy taken from cold and hot, at once)
+                count_10 += 1
+                arrow_c2d = energy_arrow(cold_point, bit_center, "c2d")
+                arrow_d2h = energy_arrow(demon_center, hot_point, "d2h")
+                arrow_c2d.set_color(RES_COLD_COLOR)
+                arrow_d2h.set_color(RES_HOT_COLOR)
+                energy_arrows.append(arrow_c2d)
+                energy_arrows.append(arrow_d2h)
+            elif initial_joint == "0d" and final_joint_state == "1d":
+                # 0d -> 1d: intrinsic demon transition with bit flip (HOT bath AND COLD bath, energy taken from cold, dumped to hot, at once)
+                count_01 += 1
+                arrow_h2d = energy_arrow(hot_point, demon_center, "h2d")
+                arrow_d2c = energy_arrow(bit_center, cold_point, "d2c")
+                arrow_h2d.set_color(RES_HOT_COLOR)
+                arrow_d2c.set_color(RES_COLD_COLOR)
+                energy_arrows.append(arrow_h2d)
+                energy_arrows.append(arrow_d2c)
+            elif initial_joint == "1d" and final_joint_state == "0d":
+                # 1d -> 0d: intrinsic demon transition with bit flip (HOT bath AND COLD bath, energy taken from hot and dumped to cold, at once)
+                count_10 += 1
+                arrow_h2d = energy_arrow(hot_point, demon_center, "h2d")
+                arrow_d2c = energy_arrow(bit_center, cold_point, "d2c")
+                arrow_h2d.set_color(RES_HOT_COLOR)
+                arrow_d2c.set_color(RES_COLD_COLOR)
+                energy_arrows.append(arrow_h2d)
+                energy_arrows.append(arrow_d2c)
+            elif initial_joint == "0u" and final_joint_state == "1u":
+                # 0u -> 1u: intrinsic demon transition with bit flip (HOT bath AND COLD bath, energy taken from cold, dumped to hot, at once)
+                count_01 += 1
+                arrow_h2d = energy_arrow(hot_point, demon_center, "h2d")
+                arrow_d2c = energy_arrow(bit_center, cold_point, "d2c")
+                arrow_h2d.set_color(RES_HOT_COLOR)
+                arrow_d2c.set_color(RES_COLD_COLOR)
+                energy_arrows.append(arrow_h2d)
+                energy_arrows.append(arrow_d2c)
+            elif initial_joint == "1d" and final_joint_state == "0u":
+                # 1d -> 0u: intrinsic demon transition with bit flip (HOT bath AND COLD bath, energy taken from hot, dumped to cold, at once)
+                count_10 += 1
+                arrow_h2d = energy_arrow(hot_point, demon_center, "h2d")
+                arrow_d2c = energy_arrow(bit_center, cold_point, "d2c")
+                arrow_h2d.set_color(RES_HOT_COLOR)
+                arrow_d2c.set_color(RES_COLD_COLOR)
+                energy_arrows.append(arrow_h2d)
+                energy_arrows.append(arrow_d2c)
+
             elif demon_changed and not flip:
                 # Intrinsic demon transition with same bit (HOT bath only)
                 if demon_only == 'd' and demon_out == 'u':
                     # d -> u: energy from HOT bath
                     arrow = energy_arrow(hot_point, demon_center, "h2d")
+                    arrow.set_color(RES_HOT_COLOR)
                     energy_arrows.append(arrow)
                 elif demon_only == 'u' and demon_out == 'd':
                     # u -> d: energy to HOT bath
                     arrow = energy_arrow(demon_center, hot_point, "d2h")
+                    arrow.set_color(RES_HOT_COLOR)
                     energy_arrows.append(arrow)
             
             # Animate transitions
             animations = []
-            if flip:
-                animations.append(TransformMatchingShapes(
-                    bit_mob, recolor_bit(bit_mob, bit_out)
-                ))
             
+            # Animate bit flip in-place if needed
+            if flip:
+                # Create new bit with flipped value at same position
+                new_bit = make_bit(bit_out).move_to(bit_mob.get_center())
+                animations.append(Transform(bit_mob, new_bit))
+            
+            # Add energy arrows
             if energy_arrows:
                 for arrow in energy_arrows:
                     animations.append(GrowArrow(arrow))
-            
+            if demon_out != current_demon_state:
+                # Create a fresh demon object with the new state for proper transformation
+                new_demon = make_demon(demon_out).move_to(demon.get_center())
+                animations.append(Transform(demon, new_demon))
+                #self.play(Transform(demon, new_demon), run_time=0.25)
+                
             if animations:
+                self.wait(t_interact * 0.2)
                 self.play(AnimationGroup(*animations), run_time=t_interact * 0.8)
                 
                 # Hold arrows briefly, then fade them
@@ -411,13 +486,12 @@ class MaxwellDemonBitTape(Scene):
             else:
                 self.wait(t_interact * 0.2)
 
-            # Demon joint state update (animate color/state change if needed)
-            new_joint_state = f"{bit_out}{demon_out}"
-            if new_joint_state != current_joint_state:
-                # Create a fresh demon object with the new state for proper transformation
-                new_demon = make_demon(new_joint_state).move_to(demon.get_center())
-                self.play(Transform(demon, new_demon), run_time=0.25)
-            current_joint_state = new_joint_state
+            # Update demon state if changed
+            
+            
+            # Update state tracking
+            current_demon_state = demon_out
+            current_joint_state = f"{bit_out}{demon_out}"
 
             # Move bit out
             self.play(bit_mob.animate.move_to([x_right, y_tape, 0]), run_time=t_move_out)
@@ -445,7 +519,8 @@ class MaxwellDemonBitTape(Scene):
             self.wait(0.1)
 
         # End card
-        end_text = Text("Simulation complete", weight="BOLD").scale(0.7).to_edge(DOWN).set_color(WHITE)
+
+        end_text = Text("Simulation complete", weight="BOLD").scale(0.7).next_to(scoreboard, DOWN).set_color(WHITE)
         self.play(FadeIn(end_text, shift=UP*0.2), run_time=0.6)
         self.wait(0.6)
         self.play(FadeOut(end_text), run_time=0.4)
