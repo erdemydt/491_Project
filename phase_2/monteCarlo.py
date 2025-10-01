@@ -1,0 +1,422 @@
+import math
+import random
+from dataclasses import dataclass
+from typing import Dict, Tuple, List, Iterable, Optional
+
+# -------------------------
+# Thermo / parameter helpers
+# -------------------------
+
+def beta(T: float, kB: float = 1.0) -> float:
+    """Inverse temperature β = 1/(k_B T). Default k_B = 1 for convenience."""
+    if T <= 0:
+        raise ValueError("Temperature must be > 0")
+    return 1.0 / (kB * T)
+
+def bias_from_T(T: float, DeltaE: float, kB: float = 1.0) -> float:
+    """
+    Return the canonical bias parameter tanh(β ΔE / 2).
+    This is what we use for both σ (hot) and ω (cold).
+    """
+    return math.tanh(0.5 * beta(T, kB) * DeltaE)
+
+def probs_from_epsilon(eps: float) -> Tuple[float, float]:
+    """
+    Convert a bias ε = p0 - p1 (with p0+p1=1) to (p0, p1).
+    ε ∈ [-1, 1].  p0 = (1+ε)/2, p1 = (1-ε)/2
+    """
+    if not -1.0 <= eps <= 1.0:
+        raise ValueError("epsilon must be in [-1, 1]")
+    p0 = 0.5 * (1.0 + eps)
+    p1 = 1.0 - p0
+    return p0, p1
+
+def epsilon_from_probs(p0: float, p1: Optional[float] = None) -> float:
+    """Return ε = p0 - p1. If p1 is None, use p1 = 1 - p0."""
+    if p1 is None:
+        p1 = 1.0 - p0
+    if p0 < 0 or p1 < 0 or abs(p0 + p1 - 1.0) > 1e-12:
+        raise ValueError("probabilities must be nonnegative and sum to 1")
+    return p0 - p1
+
+# -------------------------
+# Model parameters
+# -------------------------
+
+@dataclass
+class PhysParams:
+    # Physical knobs (you set these)
+    Th: float                 # hot-bath temperature
+    Tc: float                 # cold-bath temperature
+    DeltaE: float             # energy quantum exchanged via cooperative flip
+    kB: float = 1.0           # Boltzmann constant (default 1.0 units)
+
+    # Timescales for Poisson clocks (you set these too)
+    gamma_hot: float = 1.0    # overall scale for intrinsic (hot) demon flips
+    kappa_cold: float = 1.0   # overall scale for cooperative (cold) flips
+
+    # Derived biases (auto-filled post-init)
+    sigma: float = 0.0        # hot bias: tanh(β_h ΔE/2)
+    omega: float = 0.0        # cold bias: tanh(β_c ΔE/2)
+
+    def __post_init__(self):
+        self.sigma = bias_from_T(self.Th, self.DeltaE, self.kB)  # hot-bath bias
+        self.omega = bias_from_T(self.Tc, self.DeltaE, self.kB)  # cold-bath bias
+
+# -------------------------
+# Rates → one-step probabilities (no matrices)
+# -------------------------
+
+def intrinsic_rates(sigma: float, gamma_hot: float) -> Tuple[float, float]:
+    """
+    Demon intrinsic (hot-bath) flips:
+      d -> u : gamma*(1 - sigma)
+      u -> d : gamma*(1 + sigma)
+    """
+    d_to_u = gamma_hot * (1.0 - sigma)
+    u_to_d = gamma_hot * (1.0 + sigma)
+    return d_to_u, u_to_d
+
+def cooperative_rates(omega: float, kappa_cold: float) -> Tuple[float, float]:
+    """
+    Cooperative (cold-bath) flips on joint states:
+      0d -> 1u : kappa*(1 - omega)
+      1u -> 0d : kappa*(1 + omega)
+    """
+    d0_to_u1 = kappa_cold * (1.0 - omega)
+    u1_to_d0 = kappa_cold * (1.0 + omega)
+    return d0_to_u1, u1_to_d0
+
+# State labels (strings for readability): "0u", "0d", "1u", "1d"
+def outgoing_rates(state: str, phys: PhysParams) -> Dict[str, float]:
+    """
+    List the enabled single-step transitions and their rates from the given state.
+    """
+    d_to_u, u_to_d = intrinsic_rates(phys.sigma, phys.gamma_hot)
+    d0_to_u1, u1_to_d0 = cooperative_rates(phys.omega, phys.kappa_cold)
+
+    rates = {}
+    if state == "0u":
+        rates["0d"] = u_to_d                         # intrinsic only
+    elif state == "0d":
+        rates["0u"] = d_to_u                         # intrinsic
+        rates["1u"] = d0_to_u1                       # cooperative
+    elif state == "1u":
+        rates["1d"] = u_to_d                         # intrinsic
+        rates["0d"] = u1_to_d0                       # cooperative (reverse)
+    elif state == "1d":
+        rates["1u"] = d_to_u                         # intrinsic
+    else:
+        raise ValueError(f"Unknown state {state}")
+    return rates
+
+def one_step_distribution(current: str, t: float, phys: PhysParams) -> Dict[str, float]:
+    """
+    Exact per-window distribution using only rates and proportions (at most one jump in the window):
+      P(stay) = exp(-r_tot t)
+      P(jump i) = (r_i / r_tot) * (1 - exp(-r_tot t))
+    """
+    outs = outgoing_rates(current, phys)
+    rtot = sum(outs.values())
+    if rtot <= 0:
+        return {current: 1.0}
+
+    stay = math.exp(-rtot * t)
+    dist = {current: stay}
+    comp = 1.0 - stay
+    for nxt, r in outs.items():
+        dist[nxt] = dist.get(nxt, 0.0) + (r / rtot) * comp
+
+    # tidy normalization
+    z = sum(dist.values())
+    for k in list(dist.keys()):
+        dist[k] /= z
+    return dist
+
+def one_step_sample(current: str, t: float, phys: PhysParams, rng: random.Random = random) -> str:
+    """Sample next state according to one_step_distribution."""
+    dist = one_step_distribution(current, t, phys)
+    x = rng.random()
+    acc = 0.0
+    for s, p in dist.items():
+        acc += p
+        if x < acc:
+            return s
+    return current
+
+# -------------------------
+# Wiring bits ↔ demon per window
+# -------------------------
+
+def draw_incoming_bit(p0_in: float, rng: random.Random = random) -> str:
+    """Sample an incoming bit state '0' or '1' from p0_in."""
+    return "0" if rng.random() < p0_in else "1"
+
+def demon_bit_to_joint(bit: str, demon: str) -> str:
+    """Combine bit ('0'/'1') and demon ('u'/'d') into joint label like '0u'."""
+    return f"{bit}{demon}"
+
+def joint_to_bit_demon(joint: str) -> Tuple[str, str]:
+    """Inverse of demon_bit_to_joint."""
+    return joint[0], joint[1]
+
+def step_with_continuous_evolution(
+    demon_state: str,
+    p0_in: float,
+    T: float,
+    dt: float,
+    phys: PhysParams,
+    rng: random.Random = random
+) -> Tuple[str, str, str]:
+    """
+    One interaction window with continuous evolution:
+      - sample a fresh incoming bit from p0_in
+      - form the initial joint state
+      - evolve continuously for time T in steps of dt
+      - return (incoming_bit, demon_state_after, outgoing_bit)
+    """
+    b_in = draw_incoming_bit(p0_in, rng)
+    joint_state = demon_bit_to_joint(b_in, demon_state)
+    
+    # Continuous evolution loop
+    time_elapsed = 0.0
+    while time_elapsed < T:
+        remaining_time = T - time_elapsed
+        step_time = min(dt, remaining_time)
+        
+        # Take one step with the current joint state
+        joint_state = one_step_sample(joint_state, step_time, phys, rng)
+        time_elapsed += step_time
+    
+    # Extract final states
+    b_out, d_out = joint_to_bit_demon(joint_state)
+    return b_in, d_out, b_out
+
+def step_with_continuous_evolution_traced(
+    demon_state: str,
+    p0_in: float,
+    T: float,
+    dt: float,
+    phys: PhysParams,
+    rng: random.Random = random
+) -> Tuple[str, str, str, List[Tuple[float, str]]]:
+    """
+    Same as step_with_continuous_evolution but also returns the full trajectory.
+    Returns (incoming_bit, demon_state_after, outgoing_bit, trajectory)
+    where trajectory is a list of (time, joint_state) pairs.
+    """
+    b_in = draw_incoming_bit(p0_in, rng)
+    joint_state = demon_bit_to_joint(b_in, demon_state)
+    
+    # Track the trajectory
+    trajectory = [(0.0, joint_state)]
+    
+    # Continuous evolution loop
+    time_elapsed = 0.0
+    while time_elapsed < T:
+        remaining_time = T - time_elapsed
+        step_time = min(dt, remaining_time)
+        
+        # Take one step with the current joint state
+        joint_state = one_step_sample(joint_state, step_time, phys, rng)
+        time_elapsed += step_time
+        trajectory.append((time_elapsed, joint_state))
+    
+    # Extract final states
+    b_out, d_out = joint_to_bit_demon(joint_state)
+    return b_in, d_out, b_out, trajectory
+
+def step_with_fresh_bit(
+    demon_state: str,
+    p0_in: float,
+    t: float,
+    phys: PhysParams,
+    rng: random.Random = random
+) -> Tuple[str, str, str]:
+    """
+    One interaction window (legacy single-jump version):
+      - sample a fresh incoming bit from p0_in
+      - form the joint state
+      - evolve with one-step distribution
+      - return (incoming_bit, demon_state_after, outgoing_bit)
+    """
+    b_in = draw_incoming_bit(p0_in, rng)
+    joint0 = demon_bit_to_joint(b_in, demon_state)
+    joint1 = one_step_sample(joint0, t, phys, rng)
+    b_out, d_out = joint_to_bit_demon(joint1)
+    return b_in, d_out, b_out
+
+# -------------------------
+# Sim drivers + bias accounting
+# -------------------------
+
+def run_sim_continuous(
+    N: int,
+    T: float,
+    dt: float,
+    phys: PhysParams,
+    p0_in: float,
+    demon_init: str = "u",
+    seed: Optional[int] = None
+) -> dict:
+    """
+    Run N interaction windows with continuous evolution over time T with steps dt.
+    Each bit interacts with the demon for the full duration T, allowing multiple
+    state changes during each interaction window.
+    """
+    rng = random.Random(seed)
+
+    # stats
+    in_counts = {"0": 0, "1": 0}
+    out_counts = {"0": 0, "1": 0}
+    demon_counts = {"u": 0, "d": 0}
+
+    demon = demon_init
+    for _ in range(N):
+        b_in, demon, b_out = step_with_continuous_evolution(demon, p0_in, T, dt, phys, rng)
+        in_counts[b_in] += 1
+        out_counts[b_out] += 1
+        demon_counts[demon] += 1
+
+    # biases
+    p0_in_emp = in_counts["0"] / N
+    p1_in_emp = 1.0 - p0_in_emp
+    eps_in_emp = p0_in_emp - p1_in_emp
+
+    p0_out_emp = out_counts["0"] / N
+    p1_out_emp = 1.0 - p0_out_emp
+    eps_out_emp = p0_out_emp - p1_out_emp
+
+    # demon occupancy
+    pu_emp = demon_counts["u"] / N
+    pd_emp = 1.0 - pu_emp
+
+    return {
+        "incoming": {
+            "p0": p0_in_emp, "p1": p1_in_emp, "epsilon": eps_in_emp,
+            "counts": in_counts
+        },
+        "outgoing": {
+            "p0": p0_out_emp, "p1": p1_out_emp, "epsilon": eps_out_emp,
+            "counts": out_counts
+        },
+        "demon": {
+            "pu": pu_emp, "pd": pd_emp, "counts": demon_counts
+        }
+    }
+
+def run_sim(
+    N: int,
+    t: float,
+    phys: PhysParams,
+    p0_in: float,
+    demon_init: str = "u",
+    seed: Optional[int] = None
+) -> dict:
+    """
+    Run N interaction windows with *independent fresh bits* each time (legacy version).
+    Tracks incoming and outgoing bit biases and demon occupancy.
+    """
+    rng = random.Random(seed)
+
+    # stats
+    in_counts = {"0": 0, "1": 0}
+    out_counts = {"0": 0, "1": 0}
+    demon_counts = {"u": 0, "d": 0}
+
+    demon = demon_init
+    for _ in range(N):
+        b_in, demon, b_out = step_with_fresh_bit(demon, p0_in, t, phys, rng)
+        in_counts[b_in] += 1
+        out_counts[b_out] += 1
+        demon_counts[demon] += 1
+
+    # biases
+    p0_in_emp = in_counts["0"] / N
+    p1_in_emp = 1.0 - p0_in_emp
+    eps_in_emp = p0_in_emp - p1_in_emp
+
+    p0_out_emp = out_counts["0"] / N
+    p1_out_emp = 1.0 - p0_out_emp
+    eps_out_emp = p0_out_emp - p1_out_emp
+
+    # demon occupancy
+    pu_emp = demon_counts["u"] / N
+    pd_emp = 1.0 - pu_emp
+
+    return {
+        "incoming": {
+            "p0": p0_in_emp, "p1": p1_in_emp, "epsilon": eps_in_emp,
+            "counts": in_counts
+        },
+        "outgoing": {
+            "p0": p0_out_emp, "p1": p1_out_emp, "epsilon": eps_out_emp,
+            "counts": out_counts
+        },
+        "demon": {
+            "pu": pu_emp, "pd": pd_emp, "counts": demon_counts
+        }
+    }
+
+# -------------------------
+# (Optional) simple heat bookkeeping per window (coarse)
+# -------------------------
+def estimate_heat_c_to_h_over_path(
+    path: Iterable[Tuple[str, str]],
+    DeltaE: float
+) -> float:
+    """
+    Given a sequence of (joint_before, joint_after) pairs, estimate net heat
+    transferred from cold→hot by counting cooperative flips:
+      0d -> 1u : +ΔE from cold to hot
+      1u -> 0d : -ΔE to cold (reverse)
+    This is *coarse* because the one-jump-per-window rule ignores multiple flips.
+    """
+    Q = 0.0
+    for j0, j1 in path:
+        if j0 == "0d" and j1 == "1u":
+            Q += DeltaE
+        elif j0 == "1u" and j1 == "0d":
+            Q -= DeltaE
+    return Q
+
+# -------------------------
+# Tiny demo
+# -------------------------
+if __name__ == "__main__":
+    # Physical setup
+    Th, Tc = 2.0, 1.6       # temperatures (in k_B=1 units)
+    DeltaE = 1.0            # energy scale
+    phys = PhysParams(Th=Th, Tc=Tc, DeltaE=DeltaE, gamma_hot=1.0, kappa_cold=1.0)
+
+    # Verify derived biases
+    print(f"sigma (hot) = {phys.sigma:.4f}, omega (cold) = {phys.omega:.4f}")
+
+    # Incoming bit bias: set either p0_in or epsilon_in
+    epsilon_in = 0.9                      # more 0s than 1s
+    p0_in, p1_in = probs_from_epsilon(epsilon_in)
+    print(f"Incoming p0={p0_in:.3f}, p1={p1_in:.3f}, eps={epsilon_in:.3f}")
+
+    print("\n--- Legacy (single-jump) simulation ---")
+    # Run the probabilistic (one-or-zero jump) sim
+    stats_legacy = run_sim(N=10000, t=0.05, phys=phys, p0_in=p0_in, demon_init="u", seed=7)
+    print("Empirical incoming:", stats_legacy["incoming"])
+    print("Empirical outgoing:", stats_legacy["outgoing"])
+    print("Demon occupancy:", stats_legacy["demon"])
+
+    print("\n--- Continuous evolution simulation ---")
+    # Run the continuous evolution sim with same total time but smaller steps
+    T = 1.0      # total interaction time per bit
+    dt = 0.001    # small time step for continuous evolution
+    stats_continuous = run_sim_continuous(N=100000, T=T, dt=dt, phys=phys, p0_in=p0_in, demon_init="u", seed=7)
+    print("Empirical incoming:", stats_continuous["incoming"])
+    print("Empirical outgoing:", stats_continuous["outgoing"])
+    print("Demon occupancy:", stats_continuous["demon"])
+    
+    print(f"\nComparison (outgoing epsilon):")
+    print(f"Legacy:     {stats_legacy['outgoing']['epsilon']:.4f}")
+    print(f"Continuous: {stats_continuous['outgoing']['epsilon']:.4f}")
+    print(f"Difference: {abs(stats_legacy['outgoing']['epsilon'] - stats_continuous['outgoing']['epsilon']):.4f}")
+    # Now phi = (p1_out - p1_in) 
+    print(f"Comparison (outgoing p1):")
+    print(f"Continuous: {stats_continuous['outgoing']['p1']- stats_continuous['incoming']['p1']:.4f}")

@@ -241,8 +241,8 @@ class MaxwellDemonBitTape(Scene):
     def construct(self):
         # ---------- Parameters ----------
         P = SimParams(
-            DeltaE=1.5, Th=1.35, Tc=1.2, gamma=1.0, tau=0.8,
-            p0=0.95, N=10, seed=datetime.datetime.now().microsecond
+            DeltaE=1.0, Th=12.5, Tc=1.2, gamma=1.0, tau=5.0,
+            p0=0.3, N=100, seed=datetime.datetime.now().microsecond
         )
         rng = np.random.default_rng(P.seed)
         deriv = P.derived()
@@ -400,8 +400,8 @@ class MaxwellDemonBitTape(Scene):
             elif initial_joint == "1u" and final_joint_state == "0u":
                 # 1u -> 0u: intrinsic demon transition with bit flip (HOT bath AND COLD bath, energy taken from cold and hot, at once)
                 count_10 += 1
-                arrow_c2d = energy_arrow(cold_point, bit_center, "c2d")
-                arrow_d2h = energy_arrow(demon_center, hot_point, "d2h")
+                arrow_c2d = energy_arrow(bit_center, cold_point, "c2d")
+                arrow_d2h = energy_arrow(hot_point, demon_center, "d2h")
                 arrow_c2d.set_color(RES_COLD_COLOR)
                 arrow_d2h.set_color(RES_HOT_COLOR)
                 energy_arrows.append(arrow_c2d)
@@ -409,7 +409,7 @@ class MaxwellDemonBitTape(Scene):
             elif initial_joint == "0d" and final_joint_state == "1d":
                 # 0d -> 1d: intrinsic demon transition with bit flip (HOT bath AND COLD bath, energy taken from cold, dumped to hot, at once)
                 count_01 += 1
-                arrow_h2d = energy_arrow(hot_point, demon_center, "h2d")
+                arrow_h2d = energy_arrow(demon_center, hot_point, "h2d")
                 arrow_d2c = energy_arrow(bit_center, cold_point, "d2c")
                 arrow_h2d.set_color(RES_HOT_COLOR)
                 arrow_d2c.set_color(RES_COLD_COLOR)
@@ -427,7 +427,7 @@ class MaxwellDemonBitTape(Scene):
             elif initial_joint == "0u" and final_joint_state == "1u":
                 # 0u -> 1u: intrinsic demon transition with bit flip (HOT bath AND COLD bath, energy taken from cold, dumped to hot, at once)
                 count_01 += 1
-                arrow_h2d = energy_arrow(hot_point, demon_center, "h2d")
+                arrow_h2d = energy_arrow(demon_center, hot_point, "h2d")
                 arrow_d2c = energy_arrow(bit_center, cold_point, "d2c")
                 arrow_h2d.set_color(RES_HOT_COLOR)
                 arrow_d2c.set_color(RES_COLD_COLOR)
