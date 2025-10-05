@@ -1,8 +1,10 @@
 import math
 import random
 from dataclasses import dataclass
+import numpy as np
 from typing import Dict, Tuple, List, Iterable, Optional
-
+import matplotlib.pyplot as plt
+from datetime import datetime
 # -------------------------
 # Thermo / parameter helpers
 # -------------------------
@@ -20,7 +22,7 @@ def bias_from_T(T: float, DeltaE: float, kB: float = 1.0) -> float:
     """
     return math.tanh(0.5 * beta(T, kB) * DeltaE)
 
-def probs_from_epsilon(eps: float) -> Tuple[float, float]:
+def probs_from_delta_bias(eps: float) -> Tuple[float, float]:
     """
     Convert a bias ε = p0 - p1 (with p0+p1=1) to (p0, p1).
     ε ∈ [-1, 1].  p0 = (1+ε)/2, p1 = (1-ε)/2
@@ -46,9 +48,9 @@ def epsilon_from_probs(p0: float, p1: Optional[float] = None) -> float:
 @dataclass
 class PhysParams:
     # Physical knobs (you set these)
-    Th: float                 # hot-bath temperature
-    Tc: float                 # cold-bath temperature
-    DeltaE: float             # energy quantum exchanged via cooperative flip
+    Th: float = 0.0                 # hot-bath temperature
+    Tc: float = 0.0                 # cold-bath temperature
+    DeltaE: float = 1.0             # energy quantum exchanged via cooperative flip
     kB: float = 1.0           # Boltzmann constant (default 1.0 units)
 
     # Timescales for Poisson clocks (you set these too)
@@ -60,8 +62,17 @@ class PhysParams:
     omega: float = 0.0        # cold bias: tanh(β_c ΔE/2)
 
     def __post_init__(self):
-        self.sigma = bias_from_T(self.Th, self.DeltaE, self.kB)  # hot-bath bias
-        self.omega = bias_from_T(self.Tc, self.DeltaE, self.kB)  # cold-bath bias
+        if( self.Th != 0 or self.Tc != 0 ):
+            self.sigma = bias_from_T(self.Th, self.DeltaE, self.kB)  # hot-bath bias
+            self.omega = bias_from_T(self.Tc, self.DeltaE, self.kB)  # cold-bath bias
+        elif ( self.sigma != 0 and self.omega != 0 ):
+            try:
+                self.Th = self.DeltaE / (2.0 * self.kB * math.atanh(self.sigma))  # hot-bath temperature
+                self.Tc = self.DeltaE / (2.0 * self.kB * math.atanh(self.omega))  # cold-bath temperature
+            except ValueError:
+                raise ValueError(f"invalid sigma or omega: sigma={self.sigma}, omega={self.omega}")
+        else:
+            raise ValueError("Must specify either (Th, Tc) or (sigma, omega)")
 
 # -------------------------
 # Rates → one-step probabilities (no matrices)
@@ -379,44 +390,169 @@ def estimate_heat_c_to_h_over_path(
         elif j0 == "1u" and j1 == "0d":
             Q -= DeltaE
     return Q
+def gillespie_within_window(state, tau, phys, rng=random):
+    """
+    Simulate exact CTMC within one fixed interaction window of length tau.
+    state: initial joint state (e.g., '0u')
+    tau: duration of demon-bit interaction
+    phys: parameters (with sigma, omega, gamma_hot, kappa_cold)
+    returns: final joint state at time tau
+    """
+    t = 0.0
+    s = state
+    while True:
+        rates = outgoing_rates(s, phys)
+        rtot = sum(rates.values())
+        if rtot <= 0:
+            # absorbing state: no more jumps possible
+            return s
+        # exponential waiting time to next event
+        dt = rng.expovariate(rtot)
+        if t + dt > tau:
+            # next event would happen after window closes
+            return s
+        # otherwise, event occurs
+        t += dt
+        # choose which event
+        x = rng.random() * rtot
+        cum = 0.0
+        for nxt, r in rates.items():
+            cum += r
+            if x < cum:
+                s = nxt
+                break
+        # loop continues with new state, less time remaining
+def step_with_fresh_bit_gillespie(demon_state, p0_in, tau, phys, rng=random):
+    b_in = "0" if rng.random() < p0_in else "1"
+    joint0 = b_in + demon_state
+    jointf = gillespie_within_window(joint0, tau, phys, rng)
+    b_out, d_out = jointf[0], jointf[1]
+    return b_in, d_out, b_out
+def run_sim_gillespie_windows( N: int,
+    tau: float,
+    phys: PhysParams,
+    p0_in: float,
+    demon_init: str = "u",
+    seed: Optional[int] = None
+) -> dict:
+    """
+    Run N interaction windows with *independent fresh bits* each time (legacy version).
+    Tracks incoming and outgoing bit biases and demon occupancy.
+    Uses exact Gillespie simulation within each window.
+    """
+    rng = random.Random(seed)
 
+    # stats
+    in_counts = {"0": 0, "1": 0}
+    out_counts = {"0": 0, "1": 0}
+    demon_counts = {"u": 0, "d": 0}
+
+    demon = demon_init
+    for _ in range(N):
+        b_in, demon, b_out = step_with_fresh_bit_gillespie(demon, p0_in, tau, phys, rng)
+        in_counts[b_in] += 1
+        out_counts[b_out] += 1
+        demon_counts[demon] += 1
+
+    # biases
+    p0_in_emp = in_counts["0"] / N
+    p1_in_emp = 1.0 - p0_in_emp
+    eps_in_emp = p0_in_emp - p1_in_emp
+
+    p0_out_emp = out_counts["0"] / N
+    p1_out_emp = 1.0 - p0_out_emp
+    eps_out_emp = p0_out_emp - p1_out_emp
+
+    # demon occupancy
+    pu_emp = demon_counts["u"] / N
+    pd_emp = 1.0 - pu_emp
+
+    return {
+        "incoming": {
+            "p0": p0_in_emp, "p1": p1_in_emp, "epsilon": eps_in_emp,
+            "counts": in_counts
+        },
+        "outgoing": {
+            "p0": p0_out_emp, "p1": p1_out_emp, "epsilon": eps_out_emp,
+            "counts": out_counts
+        },
+        "demon": {
+            "pu": pu_emp, "pd": pd_emp, "counts": demon_counts
+        }
+    }
+def get_sigma_from_omega_epsilon(omega, epsilon):
+    """Given omega and epsilon, compute sigma."""
+    if not -1.0 < omega < 1.0:
+        raise ValueError("omega must be in (-1, 1)")
+    if not -1.0 <= epsilon <= 1.0:
+        raise ValueError("epsilon must be in [-1, 1]")
+    sigma = (epsilon - omega) / (-1 + epsilon * omega)
+
+    return sigma
+def plot_phi_map_gillespie(
+    N: int,
+    tau: float,
+    demon_init: str = "u",
+    n_points: int = 50,
+    omega = 0.5,
+    seed: Optional[int] = None
+):
+    """
+    Plot the information current Φ = p1' - p1 over a matrix of delta and epsilon.
+    Uses Gillespie simulation within each window.
+    """
+    phi_values = [[], []]
+    delta_range = np.linspace(-1, 1, n_points, endpoint=True)
+    epsilon_range = np.linspace(0, 1, n_points, endpoint=False)
+    percentage_comp = 0.0
+    for eps in epsilon_range:
+        row = []
+        for delta in delta_range:
+            sigma = get_sigma_from_omega_epsilon(omega, eps)
+            try:
+                phys = PhysParams(sigma=sigma, omega=omega, gamma_hot=1.0, kappa_cold=1.0)
+            except ValueError:
+                raise ValueError(f"Invalid parameters for sigma={sigma}, omega={omega}, eps={eps}")
+            phys = PhysParams(sigma=sigma, omega=omega, gamma_hot=1.0, kappa_cold=1.0)
+            p0_in, p1_in = probs_from_delta_bias(delta)
+            sta = run_sim_gillespie_windows(N=N, tau=tau, phys=phys, p0_in=p0_in, demon_init=demon_init, seed=seed)
+            phi_emp = sta["outgoing"]["p1"] - sta["incoming"]["p1"]
+            row.append(phi_emp)
+        percentage_comp += 1.0
+        print(f"Completed {percentage_comp / len(epsilon_range) * 100:.1f}%")
+        phi_values[0].append(delta)
+        phi_values[1].append(row)
+    plt.figure(figsize=(8, 6))
+    max_abs_phi = max(abs(np.min(phi_values[1])), abs(np.max(phi_values[1])))/1.5
+
+    plt.imshow(phi_values[1], extent=(-1, 1, 0, 1), aspect='auto', origin='lower', cmap='bwr', vmin=-max_abs_phi, vmax=max_abs_phi)
+    plt.colorbar(label='Φ (Information Current)')
+    plt.xlabel('Incoming Bit Bias δ')
+    plt.ylabel('Incoming Bit Bias ε')
+    plt.title(f'Information Current Φ over δ and ε (ω={omega}, N={N}, τ={tau})')
+    plt.show()
+    
 # -------------------------
 # Tiny demo
 # -------------------------
 if __name__ == "__main__":
     # Physical setup
-    Th, Tc = 2.0, 1.6       # temperatures (in k_B=1 units)
+    Th, Tc = 1.6, 1.0       # temperatures (in k_B=1 units)
     DeltaE = 1.0            # energy scale
+    print(f"Running simulation with parameters:")
+    print(f"  Th = {Th}, Tc = {Tc}, DeltaE = {DeltaE}")
     phys = PhysParams(Th=Th, Tc=Tc, DeltaE=DeltaE, gamma_hot=1.0, kappa_cold=1.0)
-
     # Verify derived biases
     print(f"sigma (hot) = {phys.sigma:.4f}, omega (cold) = {phys.omega:.4f}")
 
     # Incoming bit bias: set either p0_in or epsilon_in
     epsilon_in = 0.9                      # more 0s than 1s
-    p0_in, p1_in = probs_from_epsilon(epsilon_in)
+    p0_in, p1_in = probs_from_delta_bias(epsilon_in)
     print(f"Incoming p0={p0_in:.3f}, p1={p1_in:.3f}, eps={epsilon_in:.3f}")
-
-    print("\n--- Legacy (single-jump) simulation ---")
-    # Run the probabilistic (one-or-zero jump) sim
-    stats_legacy = run_sim(N=10000, t=0.05, phys=phys, p0_in=p0_in, demon_init="u", seed=7)
-    print("Empirical incoming:", stats_legacy["incoming"])
-    print("Empirical outgoing:", stats_legacy["outgoing"])
-    print("Demon occupancy:", stats_legacy["demon"])
-
-    print("\n--- Continuous evolution simulation ---")
-    # Run the continuous evolution sim with same total time but smaller steps
-    T = 1.0      # total interaction time per bit
-    dt = 0.001    # small time step for continuous evolution
-    stats_continuous = run_sim_continuous(N=100000, T=T, dt=dt, phys=phys, p0_in=p0_in, demon_init="u", seed=7)
-    print("Empirical incoming:", stats_continuous["incoming"])
-    print("Empirical outgoing:", stats_continuous["outgoing"])
-    print("Demon occupancy:", stats_continuous["demon"])
     
-    print(f"\nComparison (outgoing epsilon):")
-    print(f"Legacy:     {stats_legacy['outgoing']['epsilon']:.4f}")
-    print(f"Continuous: {stats_continuous['outgoing']['epsilon']:.4f}")
-    print(f"Difference: {abs(stats_legacy['outgoing']['epsilon'] - stats_continuous['outgoing']['epsilon']):.4f}")
-    # Now phi = (p1_out - p1_in) 
-    print(f"Comparison (outgoing p1):")
-    print(f"Continuous: {stats_continuous['outgoing']['p1']- stats_continuous['incoming']['p1']:.4f}")
+    sta = run_sim_gillespie_windows(N=100000, tau=2.0, phys=phys, p0_in=p0_in, demon_init="u", seed=7)
+    print("Empirical incoming:", sta["incoming"])
+    print("Empirical outgoing:", sta["outgoing"])
+    print(f"Phi_emp = {sta['outgoing']['p1'] - sta['incoming']['p1']:.4f}")
+    plot_phi_map_gillespie(N=3000, tau=1.0, demon_init="u", n_points=401, omega=0.5, seed=datetime.microsecond)
+

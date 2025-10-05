@@ -23,7 +23,7 @@ def demo_trajectory():
     
     # Simulation parameters
     epsilon_in = 0.8
-    p0_in, _ = probs_from_epsilon(epsilon_in)
+    p0_in, _ = probs_from_delta_bias(epsilon_in)
     T = 0.2         # total interaction time
     dt = 0.01       # time step
     
@@ -81,7 +81,7 @@ def compare_methods():
     # Common parameters
     N = 50000
     epsilon_in = 0.7
-    p0_in, _ = probs_from_epsilon(epsilon_in)
+    p0_in, _ = probs_from_delta_bias(epsilon_in)
     
     print(f"\nComparison with N={N} trials:")
     print(f"Incoming bias ε = {epsilon_in}")
