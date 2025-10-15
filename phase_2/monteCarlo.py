@@ -5,6 +5,7 @@ import numpy as np
 from typing import Dict, Tuple, List, Iterable, Optional
 import matplotlib.pyplot as plt
 from datetime import datetime
+import utilityFunctions as uf
 # -------------------------
 # Thermo / parameter helpers
 # -------------------------
@@ -33,8 +34,8 @@ def probs_from_delta_bias(eps: float) -> Tuple[float, float]:
     p1 = 1.0 - p0
     return p0, p1
 
-def epsilon_from_probs(p0: float, p1: Optional[float] = None) -> float:
-    """Return ε = p0 - p1. If p1 is None, use p1 = 1 - p0."""
+def bias_from_probs(p0: float, p1: Optional[float] = None) -> float:
+    """Return bias = p0 - p1. If p1 is None, use p1 = 1 - p0."""
     if p1 is None:
         p1 = 1.0 - p0
     if p0 < 0 or p1 < 0 or abs(p0 + p1 - 1.0) > 1e-12:
@@ -177,30 +178,40 @@ def step_with_continuous_evolution(
     T: float,
     dt: float,
     phys: PhysParams,
-    rng: random.Random = random
+    rng: random.Random = random,
+    cumulative: bool = False
 ) -> Tuple[str, str, str]:
     """
     One interaction window with continuous evolution:
       - sample a fresh incoming bit from p0_in
       - form the initial joint state
       - evolve continuously for time T in steps of dt
+      - if cumulative=True, use cumulative time for flips
       - return (incoming_bit, demon_state_after, outgoing_bit)
     """
     b_in = draw_incoming_bit(p0_in, rng)
     joint_state = demon_bit_to_joint(b_in, demon_state)
-    
+   
     # Continuous evolution loop
     time_elapsed = 0.0
+    other_time = 0.0
     while time_elapsed < T:
         remaining_time = T - time_elapsed
         step_time = min(dt, remaining_time)
-        
+        in_time = step_time
+        other_time += step_time
+        if cumulative:
+            in_time = other_time
+
         # Take one step with the current joint state
-        joint_state = one_step_sample(joint_state, step_time, phys, rng)
+        end_state = one_step_sample(joint_state, in_time, phys, rng)
+        if end_state != joint_state:
+            joint_state = end_state
+            other_time = 0.0
         time_elapsed += step_time
     
     # Extract final states
-    b_out, d_out = joint_to_bit_demon(joint_state)
+    b_out, d_out = joint_to_bit_demon(end_state)
     return b_in, d_out, b_out
 
 def step_with_continuous_evolution_traced(
@@ -268,6 +279,7 @@ def run_sim_continuous(
     phys: PhysParams,
     p0_in: float,
     demon_init: str = "u",
+    cumulative: bool = False,
     seed: Optional[int] = None
 ) -> dict:
     """
@@ -284,7 +296,7 @@ def run_sim_continuous(
 
     demon = demon_init
     for _ in range(N):
-        b_in, demon, b_out = step_with_continuous_evolution(demon, p0_in, T, dt, phys, rng)
+        b_in, demon, b_out = step_with_continuous_evolution(demon, p0_in, T, dt, phys, rng,cumulative)
         in_counts[b_in] += 1
         out_counts[b_out] += 1
         demon_counts[demon] += 1
@@ -531,28 +543,185 @@ def plot_phi_map_gillespie(
     plt.ylabel('Incoming Bit Bias ε')
     plt.title(f'Information Current Φ over δ and ε (ω={omega}, N={N}, τ={tau})')
     plt.show()
+
+def getSolutionWithPhys(
+    phys: PhysParams,
+    delta: float,
+    tau: float,
+    useDetSolution: bool = True
+) -> Dict[str, float]:
+    """Get the deterministic solution given physical parameters, delta, and tau."""
+    sigma = phys.sigma
+    omega = phys.omega
+    gamma = phys.gamma_hot
+    kappa = phys.kappa_cold
+    if not useDetSolution:
+        return run_sim_gillespie_windows(N=10000, tau=tau, phys=phys, p0_in=probs_from_delta_bias(delta)[0], demon_init="u", seed=None)
+    try:
+        det = uf.deterministic_solution(gamma, sigma, omega, tau, delta)
+        # print("Deterministic Phi:", det["Phi"])
+        # print("Outgoing bit distribution:", det["pB_out"])
+        # raise SystemExit("Debugging")
+    except ValueError:
+        raise ValueError(f"Invalid parameters for sigma={sigma}, omega={omega}, delta={delta}, tau={tau}")
+    return det
+
+def plot_phi_per_parameter_slice(
+    N: int,
+    demon_init: str = "u",
+    n_points: int = 50,
+    delta_fixed = 0.0,
+    fixed_params: Dict[str, float] = {"Th": 1.6, "Tc": 1.0, "DeltaE": 1.0, "gamma_hot": 1.0, "tau": 1.0},
+    param_name: str = "tau",
+    params_range: Tuple[float, float] = (0.01, 5.0),
+    gillespie: bool = True,
+    plotNegativeDelta: bool = False,
+    useDetSolution: bool = False,
+    seed: Optional[int] = None
+):
+    """
+    Plot the information current Φ = p1' - p1 over a slice of given parameter name.
+    T_H, T_C, ΔE, γ, are fixed.
+    Uses Gillespie or continuous simulation within each window.
+    """
+    deltaS_B_vals = []
+    phi_values = []
+    bit_bias_values = []
+    param_range = np.linspace(params_range[0], params_range[1], n_points, endpoint=True)
+    percentage_comp = 0.0
+    for param_value in param_range:
+        params = fixed_params.copy()
+        params[param_name] = param_value
+        try:
+            phys = PhysParams(Th=params["Th"], Tc=params["Tc"], DeltaE=params["DeltaE"], gamma_hot=params["gamma_hot"], kappa_cold=1.0)
+        except ValueError:
+            raise ValueError(f"Invalid parameters for {params}")
+        p0_in, p1_in = probs_from_delta_bias(delta_fixed)
+        sta= None
+        if gillespie:
+            sta = getSolutionWithPhys(phys, delta_fixed, params.get("tau", 1.0), useDetSolution)
+            if useDetSolution:
+                phi_emp = sta["Phi"]
+                bit_bias = sta["pB_out"][0] - sta["pB_out"][1]
+                phi_values.append(phi_emp)
+                bit_bias_values.append(bit_bias)
+                deltaS_B_vals.append(uf.DeltaS_B(delta_fixed, phi_emp))
+                percentage_comp += 1.0
+                print(f"Completed {percentage_comp / len(param_range) * 100:.1f}%")
+                continue
+        else:
+            sta = run_sim_continuous(N=N, T=params.get("tau", 1.0), dt=0.1, phys=phys, p0_in=p0_in, demon_init=demon_init, seed=seed)
+        phi_emp = sta["outgoing"]["p1"] - sta["incoming"]["p1"]
+        phi_values.append(phi_emp)
+        bit_bias = sta["outgoing"]["epsilon"]
+        bit_bias_values.append(bit_bias)
+        deltaS_B_vals.append(uf.DeltaS_B(delta_fixed, phi_emp))
+        percentage_comp += 1.0
+        print(f"Completed {percentage_comp / len(param_range) * 100:.1f}%")
     
+    # Plotting, 
+    
+    fig, ax1 = plt.subplots(figsize=(8, 6))
+    line1 = ax1.plot(param_range, phi_values, marker='o', label='Φ (Information Current)', color='blue')
+    ax1.set_xlabel(f'{param_name}')
+    ax1.set_ylabel('Φ (Information Current)', color='blue')
+    ax1.tick_params(axis='y', labelcolor='blue')
+    ax1.set_title(f'Information Current Φ over {param_name} (δ={delta_fixed}, N={N})')
+    ax1.grid()
+    
+    # Now bit bias on secondary axis
+    ax2 = ax1.twinx()
+    line2 = ax2.plot(param_range, bit_bias_values, color='green', marker='x', label='Outgoing Bit Bias δ_out')
+    ax2.set_ylabel('Outgoing Bit Bias δ_out', color='green')
+    ax2.tick_params(axis='y', labelcolor='green')
+    
+    # Zero Line For The Secondary Axis
+    ax2.axhline(0, color='black', linestyle='--')
+    line3 = None
+    if plotNegativeDelta:
+        percentage_comp = 0.0
+        phi_values = []
+        bit_bias_values = []
+        for param_value in param_range:
+            params = fixed_params.copy()
+            params[param_name] = param_value
+            try:
+                phys = PhysParams(Th=params["Th"], Tc=params["Tc"], DeltaE=params["DeltaE"], gamma_hot=params["gamma_hot"], kappa_cold=1.0)
+            except ValueError:
+                raise ValueError(f"Invalid parameters for {params}")
+            p0_in, p1_in = probs_from_delta_bias(-delta_fixed)
+            sta= None
+            if gillespie:
+                sta = getSolutionWithPhys(phys, -delta_fixed, params.get("tau", 1.0), useDetSolution)
+                if useDetSolution:
+                    phi_emp = sta["Phi"]
+                    bit_bias = sta["pB_out"][0] - sta["pB_out"][1]
+                    phi_values.append(phi_emp)
+                    bit_bias_values.append(bit_bias)
+                    percentage_comp += 1.0
+                    print(f"Completed (Opposite Bias) {percentage_comp / len(param_range) * 100:.1f}%")
+                    continue
+            else:
+                sta = run_sim_continuous(N=N, T=params.get("tau", 1.0), dt=0.1, phys=phys, p0_in=p0_in, demon_init=demon_init, seed=seed)
+            phi_emp = sta["outgoing"]["p1"] - sta["incoming"]["p1"]
+            phi_values.append(phi_emp)
+            bit_bias = sta["outgoing"]["epsilon"]
+            bit_bias_values.append(bit_bias)
+            percentage_comp += 1.0
+            print(f"Completed (Opposite Bias) {percentage_comp / len(param_range) * 100:.1f}%")
+    # Combine legends
+        line3 = ax2.plot(param_range, bit_bias_values, marker='o', label='Outgoing Bit Bias (Opposite)', color='cyan')
+        # ax3.get_yaxis().set_visible(False)  # hide the third y-axis
+        # Combine legends from all three axes
+    if line3:
+        lines = line1 + line2 + line3
+    else:
+        lines = line1 + line2   
+    labels = [l.get_label() for l in lines]
+    ax2.legend(lines, labels)
+    plt.figure(figsize=(8, 6))
+    plt.plot(param_range, deltaS_B_vals, marker='o', color='purple')
+    plt.xlabel(f'{param_name}')
+    plt.ylabel('ΔS_B (Bit Entropy Change)')
+    plt.title(f'Bit Entropy Change ΔS_B over {param_name} (δ={delta_fixed}, N={N})')
+    plt.grid()
+    plt.show()
+
 # -------------------------
 # Tiny demo
 # -------------------------
 if __name__ == "__main__":
     # Physical setup
-    Th, Tc = 1.6, 1.0       # temperatures (in k_B=1 units)
+    Th, Tc = 5.6, 1.0       # temperatures (in k_B=1 units)
     DeltaE = 1.0            # energy scale
     print(f"Running simulation with parameters:")
     print(f"  Th = {Th}, Tc = {Tc}, DeltaE = {DeltaE}")
-    phys = PhysParams(Th=Th, Tc=Tc, DeltaE=DeltaE, gamma_hot=1.0, kappa_cold=1.0)
+    phys = PhysParams(Th=Th, Tc=Tc, DeltaE=DeltaE, gamma_hot=2.0)
     # Verify derived biases
     print(f"sigma (hot) = {phys.sigma:.4f}, omega (cold) = {phys.omega:.4f}")
 
     # Incoming bit bias: set either p0_in or epsilon_in
     epsilon_in = 0.9                      # more 0s than 1s
     p0_in, p1_in = probs_from_delta_bias(epsilon_in)
-    print(f"Incoming p0={p0_in:.3f}, p1={p1_in:.3f}, eps={epsilon_in:.3f}")
+    # print(f"Incoming p0={p0_in:.3f}, p1={p1_in:.3f}, eps={epsilon_in:.3f}")
     
-    sta = run_sim_gillespie_windows(N=100000, tau=2.0, phys=phys, p0_in=p0_in, demon_init="u", seed=7)
-    print("Empirical incoming:", sta["incoming"])
-    print("Empirical outgoing:", sta["outgoing"])
-    print(f"Phi_emp = {sta['outgoing']['p1'] - sta['incoming']['p1']:.4f}")
-    plot_phi_map_gillespie(N=3000, tau=1.0, demon_init="u", n_points=401, omega=0.5, seed=datetime.microsecond)
-
+    # sta = run_sim_gillespie_windows(N=10000, tau=1.0, phys=phys, p0_in=p0_in, demon_init="u", seed=7)
+    # print("Empirical incoming, Gillespie:", sta["incoming"])
+    # print("Empirical outgoing, Gillespie:", sta["outgoing"])
+    # print(f"Phi_emp, Gillespie = {sta['outgoing']['p1'] - sta['incoming']['p1']:.4f}")
+    # plot_phi_map_gillespie(N=3000, tau=1.0, demon_init="u", n_points=401, omega=0.5, seed=datetime.microsecond)
+    # sta_cont = run_sim_continuous(N=10000, T=1.0, dt=0.1, phys=phys, p0_in=p0_in, demon_init="u", seed=7)
+    
+    # print("Empirical continuous incoming:", sta_cont["incoming"])
+    # print("Empirical continuous outgoing:", sta_cont["outgoing"])
+    # print(f"Phi_emp continuous = {sta_cont['outgoing']['p1'] - sta_cont['incoming']['p1']:.4f}")
+    # plot_phi_per_parameter_slice(N=3000, demon_init="u", n_points=200, delta_fixed=1.0,
+    #     fixed_params={"Th": 1.6, "Tc": 1.0, "DeltaE": 1.0, "gamma_hot": 1.0},
+    #     param_name="tau", params_range=(0.01, 2000.0), seed=datetime.microsecond)
+    plot_phi_per_parameter_slice(N=3000, demon_init="u", n_points=100, delta_fixed=0.192,
+        fixed_params={"Th": 1.6, "Tc": 1.0, "gamma_hot": 1.0,  "DeltaE": 2.5},
+        param_name="tau", params_range=(0.01, 15.0), seed=datetime.microsecond, gillespie=True, plotNegativeDelta=True, useDetSolution=True)
+    # sta_cont = run_sim_continuous(N=10000, T=2.0, dt=0.01, phys=phys, p0_in=p0_in, demon_init="u", seed=7,cumulative=True)
+    # print("Empirical continuous (cumulative) incoming:", sta_cont["incoming"])
+    # print("Empirical continuous (cumulative) outgoing:", sta_cont["outgoing"])
+    # print(f"Phi_emp continuous (cumulative) = {sta_cont['outgoing']['p1'] - sta_cont['incoming']['p1']:.4f}")

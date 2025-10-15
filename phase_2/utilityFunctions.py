@@ -123,6 +123,7 @@ def deterministic_solution(gamma, sigma, omega, tau, delta):
 
     R = build_R(gamma, sigma, omega)
 
+    print("Rate matrix R:\n", R)
     P_tau = expm(R * tau)
 
     # M maps demon marginal at start to joint start (uncorrelated with bit):
@@ -309,33 +310,3 @@ def DeltaS_B(delta_in, Phi):
 def Q_c_to_h(Phi, DeltaE):
     """Eq. (7): Q_{c→h} = Φ * ΔE (per bit/interval)."""
     return float(Phi * DeltaE)    
-
-def uniform_to_normal(u1, u2):
-    """Box-Muller transform: two U(0,1) -> one N(0,1)."""
-    r = np.sqrt(-2.0 * np.log(u1))
-    theta = 2.0 * np.pi * u2
-    z = r * np.cos(theta)
-    return z
-
-def compare_normal_dists():
-    import matplotlib.pyplot as plt
-    from scipy.stats import norm
-
-    rng = np.random.default_rng(42)
-    N = 1000000
-    us = rng.uniform(0.0, 1.0, size=(N,2))
-    zs = np.array([uniform_to_normal(u1, u2) for u1, u2 in us])
-
-    # Plot histogram of zs
-    plt.hist(zs, bins=1000, density=True, alpha=0.6, color='g', label='Box-Muller samples')
-
-    # Overlay standard normal PDF
-    x = np.linspace(-8, 8, 1000)
-    plt.plot(x, norm.pdf(x), 'r-', lw=2, label='Standard Normal PDF')
-
-    plt.title('Comparison of Box-Muller Samples to Standard Normal PDF')
-    plt.xlabel('Value')
-    plt.ylabel('Density')
-    plt.legend()
-    plt.grid()
-    plt.show()

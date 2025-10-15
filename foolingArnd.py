@@ -2,10 +2,10 @@ import utilityFunctions as uf
 import matplotlib.pyplot as plt
 
 # Example usage using utility functions from utilityFunctions
-gamma = 1.0
-sigma, omega, _ = uf.temps_to_sigma_omega(Tc=1.0, Th=1.6, DeltaE=1.0, k_B=uf.kB)
+gamma = 2.0
+sigma, omega, _ = uf.temps_to_sigma_omega(Tc=1.0, Th=5.6, DeltaE=1.0, k_B=uf.kB)
 print("sigma, omega, and epsilon from temps:", sigma, omega, _)
-tau = 2.0
+tau = 1.0
 delta = 0.9  # incoming bit bias
 print(f"epsilon_in = {_:.4f}, delta = {delta}, sigma = {sigma:.4f}, omega = {omega:.4f}")
 det = uf.deterministic_solution(gamma, sigma, omega, tau, delta)
@@ -20,7 +20,7 @@ conv = uf.convergence_study(gamma, sigma, omega, tau, delta)
 print("Ns:", conv["N"])
 print("Phi_emp:", conv["Phi_emp"])
 print("Absolute errors:", conv["abs_err"])
-
+uf.compare_normal_dists()
 # # Optional: plot running convergence of Phi for one long run
 # plt.figure()
 # plt.plot(mc["running_phi"])
