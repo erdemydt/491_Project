@@ -697,7 +697,7 @@ def benchmark_comparison(min_n: int = 2, max_n: int = 50, tape_params: dict = No
 if __name__ == "__main__":
     # Example parameters
     test_params = {
-        "min_n": 2,
+        "min_n": 20,
         "max_n": 50,
         "tape_params": {"N": 8000, "p0": 1.0},
         "tau": 20.0
@@ -731,7 +731,7 @@ if __name__ == "__main__":
     results_mc = plot_total_energy_vs_demon_n_optimized(
         **test_params,
         step=5,
-        mc_samples=20,
+        mc_samples=50,
         show_error_bars=True
     )
 

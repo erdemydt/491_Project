@@ -247,4 +247,4 @@ def plot_total_energy_vs_demon_n(min_n: int, max_n: int, tape_params: dict = Non
 
 
 if __name__ == "__main__":
-    plot_total_energy_vs_demon_n(min_n=2, max_n=2000, tape_params={"N": 10000, "p0": 1.0}, tau=30.0)
+    plot_total_energy_vs_demon_n(min_n=2, max_n=20, tape_params={"N": 50000, "p0": 1.0}, tau=20.0)
