@@ -588,6 +588,7 @@ def plot_phi_per_parameter_slice(
     phi_values = []
     bit_bias_values = []
     param_range = np.linspace(params_range[0], params_range[1], n_points, endpoint=True)
+    
     percentage_comp = 0.0
     for param_value in param_range:
         params = fixed_params.copy()
@@ -622,21 +623,26 @@ def plot_phi_per_parameter_slice(
     # Plotting, 
     
     fig, ax1 = plt.subplots(figsize=(8, 6))
-    line1 = ax1.plot(param_range, phi_values, marker='o', label='Φ (Information Current)', color='blue')
+    # line1 = ax1.plot(param_range, phi_values, marker='o', label='Φ (Information Current)', color='blue')
     ax1.set_xlabel(f'{param_name}')
-    ax1.set_ylabel('Φ (Information Current)', color='blue')
-    ax1.tick_params(axis='y', labelcolor='blue')
-    ax1.set_title(f'Information Current Φ over {param_name} (δ={delta_fixed}, N={N})')
+    # ax1.set_ylabel('Φ (Information Current)', color='blue')
+    ax1.tick_params(axis='y')
+    ax1.set_title(f'Outgoing Bit Bias δ_out over {param_name} (δ={delta_fixed}, N={N}), T_H={fixed_params["Th"]}, T_C={fixed_params["Tc"]}, gamma={fixed_params["gamma_hot"]}, tau={fixed_params["tau"]}')
     ax1.grid()
     
     # Now bit bias on secondary axis
-    ax2 = ax1.twinx()
-    line2 = ax2.plot(param_range, bit_bias_values, color='green', marker='x', label='Outgoing Bit Bias δ_out')
-    ax2.set_ylabel('Outgoing Bit Bias δ_out', color='green')
-    ax2.tick_params(axis='y', labelcolor='green')
+    # ax2 = ax1.twinx()
     
+    line1 = ax1.plot(param_range, bit_bias_values, color='green', marker='x', label='Outgoing Bit Bias δ_out')
+    # flip x axis
+    ax1.set_xscale('log')
+    
+
+    ax1.set_ylabel('Outgoing Bit Bias δ_out', color='green')
+
+
     # Zero Line For The Secondary Axis
-    ax2.axhline(0, color='black', linestyle='--')
+    ax1.axhline(0, color='black', linestyle='--')
     line3 = None
     if plotNegativeDelta:
         percentage_comp = 0.0
@@ -674,16 +680,16 @@ def plot_phi_per_parameter_slice(
         # ax3.get_yaxis().set_visible(False)  # hide the third y-axis
         # Combine legends from all three axes
     if line3:
-        lines = line1 + line2 + line3
+        lines = line1 #+ line2 + line3
     else:
-        lines = line1 + line2   
+        lines = line1 #+ line2
     labels = [l.get_label() for l in lines]
-    ax2.legend(lines, labels)
+    # ax2.legend(lines, labels)
     plt.figure(figsize=(8, 6))
     plt.plot(param_range, deltaS_B_vals, marker='o', color='purple')
     plt.xlabel(f'{param_name}')
     plt.ylabel('ΔS_B (Bit Entropy Change)')
-    plt.title(f'Bit Entropy Change ΔS_B over {param_name} (δ={delta_fixed}, N={N})')
+    plt.title(f'Bit Entropy Change ΔS_B over {param_name} (δ={delta_fixed}, N={N}), T_H={fixed_params["Th"]}, T_C={fixed_params["Tc"]}, gamma={fixed_params["gamma_hot"]}, tau={fixed_params["tau"]}')
     plt.grid()
     plt.show()
 
@@ -718,9 +724,9 @@ if __name__ == "__main__":
     # plot_phi_per_parameter_slice(N=3000, demon_init="u", n_points=200, delta_fixed=1.0,
     #     fixed_params={"Th": 1.6, "Tc": 1.0, "DeltaE": 1.0, "gamma_hot": 1.0},
     #     param_name="tau", params_range=(0.01, 2000.0), seed=datetime.microsecond)
-    plot_phi_per_parameter_slice(N=3000, demon_init="u", n_points=100, delta_fixed=0.192,
-        fixed_params={"Th": 1.6, "Tc": 1.0, "gamma_hot": 1.0,  "DeltaE": 2.5},
-        param_name="tau", params_range=(0.01, 15.0), seed=datetime.microsecond, gillespie=True, plotNegativeDelta=True, useDetSolution=True)
+    plot_phi_per_parameter_slice(N=50000, demon_init="u", n_points=100, delta_fixed=1.0,
+        fixed_params={"Th": 1.6, "Tc": 1.0, "gamma_hot": 1.0,  "tau": 3.0},
+        param_name="DeltaE", params_range=(1.0, 0.0002), seed=datetime.microsecond, gillespie=True, plotNegativeDelta=False, useDetSolution=False)
     # sta_cont = run_sim_continuous(N=10000, T=2.0, dt=0.01, phys=phys, p0_in=p0_in, demon_init="u", seed=7,cumulative=True)
     # print("Empirical continuous (cumulative) incoming:", sta_cont["incoming"])
     # print("Empirical continuous (cumulative) outgoing:", sta_cont["outgoing"])
