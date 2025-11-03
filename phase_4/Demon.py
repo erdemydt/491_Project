@@ -16,16 +16,54 @@ GAMMA = 1.0
 @dataclass
 class PhysParams:
     """Class to hold physical parameters for the simulation.
+    
+    Can be initialized in two ways:
+    1. Using temperatures: PhysParams(Th=..., Tc=..., DeltaE=..., gamma=...)
+    2. Using rates: PhysParams(sigma=..., omega=..., DeltaE=..., gamma=...)
+    
     Attributes:
-        Th (float): Temperature of the hot reservoir.
-        Tc (float): Temperature of the cold reservoir.
+        Th (float): Temperature of the hot reservoir (computed from sigma if not provided).
+        Tc (float): Temperature of the cold reservoir (computed from omega if not provided).
         DeltaE (float): Energy difference between demon states.
-        gamma_hot (float): Transition rate with the hot reservoir.
+        gamma (float): Transition rate with the hot reservoir.
+        sigma (float): Intrinsic transition parameter tanh(DeltaE/(2*Th)) (computed from Th if not provided).
+        omega (float): Outgoing transition parameter tanh(DeltaE/(2*Tc)) (computed from Tc if not provided).
     """
-    Th: float
-    Tc: float
     DeltaE: float
     gamma: float
+    Th: Optional[float] = None
+    Tc: Optional[float] = None
+    sigma: Optional[float] = None
+    omega: Optional[float] = None
+    
+    def __post_init__(self):
+        """Compute derived parameters based on what was provided."""
+        # Case 1: Both Th and Tc provided
+        if self.Th is not None and self.Tc is not None:
+            if self.sigma is not None or self.omega is not None:
+                raise ValueError("Provide either (Th, Tc) or (sigma, omega), not both")
+            self.sigma = np.tanh(self.DeltaE / (2 * self.Th))
+            self.omega = np.tanh(self.DeltaE / (2 * self.Tc))
+        
+        # Case 2: Both sigma and omega provided
+        elif self.sigma is not None and self.omega is not None:
+            if self.Th is not None or self.Tc is not None:
+                raise ValueError("Provide either (Th, Tc) or (sigma, omega), not both")
+            # Compute temperatures from sigma and omega
+            self.Th = self.DeltaE / (2 * np.arctanh(self.sigma))
+            self.Tc = self.DeltaE / (2 * np.arctanh(self.omega))
+        
+        # Case 3: Invalid - must provide one complete set
+        else:
+            raise ValueError("Must provide either (Th, Tc) or (sigma, omega)")
+        
+        # Validate that all values are now set
+        if self.Th <= 0 or self.Tc <= 0:
+            raise ValueError("Temperatures must be positive")
+        if not (-1 < self.sigma < 1):
+            raise ValueError(f"sigma must be in (-1, 1), got {self.sigma}")
+        if not (-1 < self.omega < 1):
+            raise ValueError(f"omega must be in (-1, 1), got {self.omega}")
 
 
 
@@ -39,7 +77,7 @@ class Demon:
     """
     def __init__(self, n: int, phys_params: PhysParams = None, init_state: str = 'd0', energy_distribution: str = "uniform"):
         if phys_params is None:
-            self.phys_params = PhysParams(Th=T_H, Tc=T_C, DeltaE=DELTAE, gamma=GAMMA)
+            self.phys_params = PhysParams(sigma=.3, omega=.8, DeltaE=DELTAE, gamma=GAMMA)
         else:
             self.phys_params = phys_params
         self.n = n
