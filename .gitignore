@@ -3,8 +3,8 @@ phase_0/
 phase_5/
 phase_4/plots/
 phase_4/Simulation_optimized.py
-*.png
-*.jpg
+
+
 *.pdf
 progress_rep_phase/
 projectEnv/
