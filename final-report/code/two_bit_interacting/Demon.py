@@ -155,8 +155,8 @@ class TwoBitDemon:
         
         # Count bit changes
         bits_changed = (b1_from != b1_to) + (b2_from != b2_to)
-        if bits_changed > 1:
-            raise ValueError(f"At most one bit can flip in cooperative transition, got {bits_changed}")
+        # if bits_changed > 1:
+        #     raise ValueError(f"At most one bit can flip in cooperative transition, got {bits_changed}")
         
         # Add forward transition
         key_fwd = (d_from, b1_from, b2_from)

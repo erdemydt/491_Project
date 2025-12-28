@@ -585,8 +585,8 @@ Differences (2-Bit − 1-Bit):
     plt.suptitle(main_title, fontsize=14, fontweight='bold')
     plt.tight_layout()
     # We want very high resolution for detailed text
-    plt.savefig('final-report/demonn/two-bit-comp-plot.png', dpi=300)
-    print("Saved figure: final-report/demonn/two-bit-comp-plot.png")
+    plt.savefig('final-report/demonn/two-bit-comp-plot-lesstempdiff2.png', dpi=300)
+    print("Saved figure: final-report/demonn/two-bit-comp-plot-2.png")
 
 
 def sweep_tau(tau_values: List[float], tape_params: Dict, phys_params: PhysParams = None,
@@ -1347,8 +1347,12 @@ if __name__ == "__main__":
     print("\n3. Custom Two-Bit Demon with modified transitions...")
     custom_two_bit_demon = TwoBitDemon(phys_params=phys_params, init_state='d')
     custom_two_bit_demon.remove_cooperative_transition("u", "1","1")
-    custom_two_bit_demon.add_cooperative_transition(d_from="d", b1_from="1", b2_from="1",
-                                                    d_to="u", b1_to="1", b2_to="0")
+    custom_two_bit_demon.add_cooperative_transition(d_from="u", b1_from="1", b2_from="1",
+                                                    d_to="d", b1_to="1", b2_to="0")
+    custom_two_bit_demon.add_cooperative_transition(d_from="d", b1_from="0", b2_from="1",
+                                                    d_to="u", b1_to="1", b2_to="1")
+    custom_two_bit_demon.add_cooperative_transition(d_from="d", b1_from="0", b2_from="0",
+                                                    d_to="u", b1_to="1", b2_to="1")
     
     
     tape_params = {'N': 20000, 'p0': 1.0, 'init_mode': 'random'}
@@ -1368,11 +1372,11 @@ if __name__ == "__main__":
     # Demo 2: Comparison with pair-controlled tape
 
     tape_params = {
-        'N': 20000, 
-        'p0': 0.5,  # This won't be used much since we control pairs
+        'N': 200000, 
+        'p0': 1.0,  # This won't be used much since we control pairs
         'init_mode': 'pair_distribution',
-        'pair_00_frac': 0.3,
-        'pair_11_frac': 0.3
+        'pair_00_frac': 0.0,
+        'pair_11_frac': 0.02
     }
     comparison2 = compare_demons(tape_params, phys_params, tau=5.0, seed=123, plot=True, two_bit_demon=custom_two_bit_demon,title="Demon 1")
     tape_params = {
