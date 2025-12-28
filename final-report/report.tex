@@ -1,0 +1,449 @@
+\documentclass[aps,twocolumn]{revtex4-2}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath, amssymb}
+\usepackage{siunitx}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{xurl}      
+\usepackage[hidelinks]{hyperref} 
+\usepackage{subcaption}
+\usepackage{enumitem}
+\graphicspath{{images/}}
+\usepackage{lipsum}
+\usepackage{amsmath,amssymb}
+\usepackage{url}
+\usepackage{pgfgantt}
+\usepackage{placeins}
+\usepackage{appendix}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  citecolor=teal,
+  urlcolor=blue
+}
+
+% Title
+
+
+\usepackage{float}
+\begin{document}
+
+	itle{Final Report: An Extended Maxwell's Refrigerator }
+\author{Erdem Pülat}
+\affiliation{Bilkent University, Department of Physics}
+\date{\today}
+
+\begin{abstract}
+This report documents my reproduction and extension of the autonomous Maxwell demon model by Mandal \emph{et al.}\cite{mandal2013refrigerator}, a minimal device that rectifies thermal transitions while processing information on a moving tape. First, the original two-state ``Maxwell refrigerator'' is numerically reproduced using a Gillespie simulation, and its known limits and phase behavior are recovered. Second, I demonstrate an alternative route to stronger refrigeration without slowing the tape: stacking multiple demons in series, where increasing the number of demons $K$ mimics increasing the interaction time $\tau$ for a single demon. Third, the framework is generalized to demons with $n>2$ internal states arranged as energy ladders, clarifying how model choices about energy scales and transition parametrizations affect the interpretation of $\Delta E$. Finally, I introduce a two-bit interacting demon that processes bit-pairs and can actively reshape correlations on the tape, extending the information-thermodynamics interplay beyond independent bits.
+\end{abstract}
+\maketitle
+
+
+
+
+\section{Introduction}
+\label{sec:intro}
+
+In a 1871 thought experiment, Maxwell imagined a ``neat-fingered being'' that had such information about the system that it could sort gas molecules by speed, creating a temperature difference between two chambers without work \cite{leff2003maxwell}. This paradox—a seeming violation of the second law of thermodynamics on the surface—is, in truth, a wonderful thought experiment that connects information and entropy. Any physical device performing such sorting must process and store information about molecular states. The process of writing this information to any sort of memory increases the Shannon entropy of the memory, compensating for the decrease in thermodynamic entropy from the heat flow. Thus, we arrive at a balance, and the total entropy is again ever-increasing.
+
+'Maxwell's demon' can mean any setup that uses microscopic fluctuations to lower thermodynamic entropy\cite{maxwell1871theory,szilard1929}. These models/mechanisms obey the second law if the device is also "writing" information to a memory: the rise in information (Shannon) entropy offsets the thermodynamic entropy drop. If that information is later erased, Landauer's principle says that thermodynamic entropy must increase elsewhere\cite{landauer1961}. Counting Shannon and Clausius entropies together ensures that the system obeys the second law as long as their sum remains constant or decreases. It is essential to note that this approach links information entropy to the second law of thermodynamics.
+
+Mandal \emph{et al.} \cite{mandal2013refrigerator} made this abstract principle more concrete by designing a simple model: a classical two-state system (a ``demon'') that interacts with thermal baths at two temperatures while sequentially processing bits on a moving tape (FIG \ref{fig:demondesign}).  When the incoming tape has an excess of $0$ bits, the demon can exploit this bias to pump heat from a cold reservoir to a hot one, similar to a refrigerator; hence, the name Maxwell's refrigerator.\cite{mandal2013refrigerator} Alternatively, when the temperature gradient opposes the tape bias, the demon erases information from the tape, reducing its Shannon entropy at the thermodynamic cost of allowing heat to flow downhill.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1\linewidth]{images/demon_design.png}
+    \caption{(a) The demon processes one bit at a time while exchanging energy with two heat baths.
+(b) It changes its own state via the hot bath (vertical arrows) and, together with the current bit, makes coupled transitions 0d $\leftrightarrow$1u via the cold bath (diagonal arrows). }\cite{mandal2013refrigerator}
+    \label{fig:demondesign}
+\end{figure}
+
+The present work has three objectives: (i) to examine the model's parameters and behavior and ensure that a numerical implementation conforms to the analytic results, (ii) to explore extensions that improve performance without altering the reservoir temperatures---in particular stacking demons and enlarging the internal state space---and (iii) to study a two-bit interacting variant in which the demon can modify not only the tape bias but also correlations.
+
+\section{Two-State Demon: Reproduction of the Maxwell's Refrigerator}
+\label{sec:two_state}
+
+\subsection{Physical Setup and Operating Mechanism}
+
+The demon is a two-state system with states $u$ (up) and $d$ (down) separated by energy $\Delta E = E_u - E_d > 0$. It sits next to a tape of bits (each bit has states $0$ and $1$ at equal energies) that moves past at constant velocity $v$. The demon interacts with each bit for a fixed time $\tau$ before the tape advances to the next bit. Crucially, the demon simultaneously contacts two thermal reservoirs: a hot bath at temperature $T_H$ and a cold bath at temperature $T_C < T_H$ \cite{mandal2013refrigerator}.
+
+ The demon can change its internal state in two ways. It can flip between $u$ and $d$ by absorbing or emitting energy $\Delta E$ to the hot bath, called``intrinsic'' transitions. If the demon is in state $d$ and the current bit shows $0$, they can also together transition to $1u$: the bit flips to $1$ and the demon jumps to $u$, with the energy $\Delta E$ coming from the cold bath. The reverse ($1u \to 0d$) is also possible, returning energy to the cold bath. Importantly, no other cooperative transitions are allowed—you cannot go from $0u$ to $1d$\cite{mandal2013refrigerator}.
+
+This restricted coupling creates a rectification effect. Consider an incoming tape with mostly $0$ bits. When the demon encounters a $0$, there's a chance to execute $0d \to 1u$, drawing energy $\Delta E$ from the cold bath. The demon might then go back to $d$ via the hot channel, dumping $\Delta E$ into the hot bath, as such energy flows from cold to hot, with the outgoing tape showing more $1$ bits as a record/result of this process. The incoming bias (excess of $0$'s) is similar to a thermodynamic ``fuel'' that enables refrigeration.
+
+\subsection{Transition Rates and Detailed Balance}
+
+To make this quantitative, we assign rates to all allowed transitions. The hot-channel transitions must satisfy:
+\begin{equation}
+\frac{R_{d\to u}}{R_{u\to d}} = e^{-\beta_H \Delta E}, \quad \text{where} \quad \beta_H = \frac{1}{k_B T_H}.
+\end{equation}
+Following \cite{mandal2013refrigerator}, 
+\begin{equation}
+R_{d\to u} = \gamma(1-\sigma), \quad R_{u\to d} = \gamma(1+\sigma)
+\label{eq:hot_rates}
+\end{equation}
+
+\begin{equation}
+    \sigma = \tanh\left(\frac{\beta_H \Delta E}{2}\right)
+\end{equation}
+where $\gamma > 0$ sets how fast the demon equilibrates with the hot bath.
+
+Similarly, the cold-channel cooperative transitions obey detailed balance at $T_C$:
+\begin{equation}
+\frac{R_{0d\to 1u}}{R_{1u\to 0d}} = e^{-\beta_C \Delta E}, \quad \text{where} \quad \beta_C = \frac{1}{k_B T_C}.
+\end{equation}
+We set
+\begin{equation}
+R_{0d\to 1u} = 1-\omega, \quad R_{1u\to 0d} = 1+\omega.
+\label{eq:cold_rates}
+\end{equation}
+
+\begin{equation}
+    \omega = \tanh\left(\frac{\beta_C \Delta E}{2}\right)
+\end{equation}
+
+\cite{mandal2013refrigerator}
+
+
+The temperature difference determines which bath ``wins'' the tug-of-war. Mandal \emph{et al.} showed that 
+\begin{equation}
+\epsilon = \frac{\omega - \sigma}{1 - \omega\sigma} = \tanh\left[\frac{(\beta_C - \beta_H)\Delta E}{2}\right]
+\label{eq:epsilon}
+\end{equation}
+represents the temperature difference, and we will later see that this number will set a limit for the output tape bias.
+
+\subsection{Information Current and Heat Flow}
+
+Let the incoming tape have bias $\delta \equiv p_0 - p_1$ (the excess fraction of $0$ bits). After interacting with the demon, bits emerge with bias $\delta' = p'_0-p'_1$. We define the $\Phi$, information current:
+\begin{equation}
+\Phi \equiv p'_1 - p_1 = \frac{\delta - \delta'}{2}.
+\label{eq:Phi}
+\end{equation}
+$\Phi$ measures the net rate at which $0$ bits flip to $1$. The name ``information current'' reflects that $\Phi > 0$ means the demon is writing information\cite{mandal2013refrigerator}.
+
+ Each net $0 \to 1$ flip corresponds to one cooperative transition $0d \to 1u$. Since that transition extracts energy $\Delta E$ from the cold bath, the average heat flow from cold to hot per bit interaction is
+\begin{equation}
+Q_{c\to h} = \Phi \cdot \Delta E.
+\label{eq:Qch}
+\end{equation}
+Thus, a positive $\Phi$  means refrigeration: heat flows against the gradient.
+
+The Mandal et. al. solution gives
+\begin{equation}
+\Phi = \frac{\delta - \epsilon}{2} \eta(\gamma, \tau, \sigma, \omega, \delta), \quad \eta > 0,
+\label{eq:Phi_solution}
+\end{equation}
+where $\eta$ depends on all parameters but is strictly positive, proof is in the appendix of \cite{mandal2013refrigerator}. Consequently, the sign of $\Phi$ is determined by the difference between the incoming bias $\delta$ and the thermal parameter $\epsilon$. When $\delta > \epsilon$, the tape bias wins and we get refrigeration. When $\delta < \epsilon$, the temperature gradient wins and the demon acts as an eraser, leading to a $\delta'$ closer to $\epsilon$ than $\delta$ \cite{mandal2013refrigerator}.
+
+
+To take into account the second law,  we look at the modified Clausius inequality
+\begin{equation}
+Q_{c\to h}(\beta_H - \beta_C) + \Delta S_B \geq 0,
+\label{eq:second_law}
+\end{equation}
+where $\Delta S_B = S(\delta') - S(\delta)$ is the change in Shannon entropy per bit, with
+\begin{equation}
+S(\delta) = -\frac{1-\delta}{2}\ln\frac{1-\delta}{2} - \frac{1+\delta}{2}\ln\frac{1+\delta}{2}.
+\end{equation}
+This states that the thermodynamic entropy decrease (first term, negative when heat flows up the gradient) must be compensated by an increase in information entropy.
+
+
+\subsection{Numerical Implementation}
+
+Here, it is important to note that the original paper \cite{mandal2013refrigerator} does not contain a numerical implementation of the problem; rather, its main achievement is the analytic solution of this setup. This enables us to cross-check our numerical implementation with the analytical solution. 
+
+\subsubsection{Gillespie Method}
+We employ the stochastic simulation algorithm (SSA) of Gillespie~\cite{gillespie1976} inside each interaction window of duration \(\tau\), during which a single bit interacts with the demon and the thermal reservoirs.\footnote{Initially, I attempted to simulate multiple extremely small $dt$ windows at each $\tau$; however, this proved to be less reliable and significantly more computationally expensive. As such, I decided to only use the Gillespie Method going forward.}
+
+For our joint state \(s\in\{0u,0d,1u,1d\}\), the total exit rate is
+\[
+r_{\text{out}}(s)=
+\begin{cases}
+\gamma(1+\sigma), & s=0u,\\[2pt]
+\gamma(1-\sigma)+(1-\omega), & s=0d,\\[2pt]
+\gamma(1+\sigma)+(1+\omega), & s=1u,\\[2pt]
+\gamma(1-\sigma), & s=1d~.
+\end{cases}
+\] Thanks to Eq.~ \ref{eq:hot_rates} \& \ref{eq:cold_rates}
+
+
+Given the current joint state \(s\) inside the window, let \(\{r_j\}\) be the rates of the reactions that can fire from \(s\) (one or two transition channels, depending on \(s\)). The SSA's waiting time is
+\[
+dt \sim \mathrm{Exp}\!\big(r_{\text{out}}(s)\big),\quad\text{i.e.}\quad dt=-\frac{\ln u_1}{r_{\text{out}}(s)},\; u_1\sim\mathcal U(0,1),
+\]
+and, conditional on a jump, picks channel \(j\) with probability \(r_j/r_{\text{out}}(s)\) using a second uniform \(u_2\).
+
+
+For each bit–demon encounter:
+\begin{enumerate}
+\item Initialize \(t\leftarrow 0\) with incoming bit \(b\in\{0,1\}\) (drawn from \(p_0,p_1\)) and demon state \(d\in\{u,d\}\). Set joint state \(s=(b,d)\).
+\item \textbf{While} \(t<\tau\):
+  \begin{enumerate}
+  \item Compute all enabled rates \(\{r_j\}\) from \(s\) and their sum \(r_{\text{out}}(s)\).
+  \item Draw \(dt=-\ln u_1/r_{\text{out}}(s)\). If \(t+dt\ge\tau\): set \(t\leftarrow\tau\) and \textbf{break} (no jump occurs in this window).
+  \item Otherwise, select the firing channel \(j\) by finding the smallest index with
+  \[
+  \sum_{k\le j-1} r_k < u_2\, r_{\text{out}}(s) \le \sum_{k\le j} r_k,\qquad u_2\sim\mathcal U(0,1).
+  \]
+  \item Update the joint state \(s\) according to \(j\), advance time \(t\leftarrow t+dt\).
+ \end{enumerate}
+\end{enumerate}
+
+
+
+Additionally, for our numerical implementation, it is more convenient to make use of the dimensionless parameters $\sigma$, $\omega$, and $\epsilon$ going forward, and focus on the output parameter $\Phi$. $\Phi$ defines the \emph{net} number of $0\to1$ flips per bit, and each  $0\to1$ flip is an action against the thermal gradient, a refrigeration, and vice versa is also true for the eraser case ($\Phi<0$). Thus, it quantifies how close the system is to a perfect refrigerator; if $\Phi = 1$, all bit flips are $ 0 \ to 1$, which would mean that the heat flow is only from the cold reservoir to the hot reservoir. However, this would only be possible with $\epsilon = 0$,(See Eq. \ref{eq:Phi_solution}) which is frankly a boring system with $\sigma = \omega \rightarrow T_H = T_C$. Which is why our aim in this project is to get as close as possible to $\Phi = 1$ without changing the temperature differences or $\Delta E$. 
+
+\subsubsection{Results}
+With that out of the way, I first attempted to reproduce the phase diagram presented in the original paper using the aforementioned method.
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}{0.48\linewidth}
+    \includegraphics[width=\linewidth]{two_state_diagrams/diagram_1.png}
+    \caption{}\label{fig:p1}
+  \end{subfigure}\hfill
+  \begin{subfigure}{0.48\linewidth}
+    \includegraphics[width=\linewidth]{two_state_diagrams/diagram_2.png}
+    \caption{}\label{fig:p2}
+  \end{subfigure}
+
+  \vspace{0.6em}
+
+  \begin{subfigure}{0.48\linewidth}
+    \includegraphics[width=\linewidth]{two_state_diagrams/diagram_3.png}
+    \caption{}\label{fig:p3}
+  \end{subfigure}\hfill
+  \begin{subfigure}{0.48\linewidth}
+    \includegraphics[width=\linewidth]{two_state_diagrams/paper_diagram.png}
+    \caption{}\label{fig:p4}
+  \end{subfigure}
+
+  \caption{a, b, and c are my simulation results, while d is the exact solution in the paper. Black lines represent $\Delta S_B = 0$. The values on the lines in image d represent $\tau$ values, and plots a, b, c represent $\tau = 1.0, 4.0, 10000$ respectively, with blue areas acting as erasers and red parts representing refrigeration. Also all plots have $\omega = 1/2, \gamma = 0.1$}
+  \label{fig:pgrid}
+\end{figure}
+\footnote{Throughout this section, $n=2$ denotes the number of internal demon states.}
+As shown in FIG. \ref{fig:pgrid}, the simulation results are consistent with the phase diagram presented in the original paper (FIG. \ref{fig:p4}). The next part that I wanted to check was the $\gamma \to \infty$ limit, as the original paper states that in that limit, the expression for $\Phi$ simplifies to:
+\begin{equation}
+    \Phi = \frac{\delta - \epsilon}{2} [1-e^{-(1-\sigma \omega )\tau}].
+\end{equation} \cite{mandal2013refrigerator}
+
+Thus, we can check if we approach this limit with high gamma. 
+\begin{figure}
+  \centering
+    \begin{subfigure}{0.9\linewidth}
+    \includegraphics[width=\linewidth]{gamma/gamma_vs_phi_higher_tau_3.png}
+    \caption{}\label{fig:ghtau3}
+  \end{subfigure}\hfill
+  \begin{subfigure}{0.9\linewidth}
+    \includegraphics[width=\linewidth]{gamma/gamma_vs_phi_higher_tau_1.png}
+    \caption{}\label{fig:ghtau1}
+  \end{subfigure}\hfill
+  \begin{subfigure}{0.9\linewidth}
+    \includegraphics[width=\linewidth]{gamma/gamma_vs_phi_higher_tau_2.png}
+    \caption{}\label{fig:ghtau2}
+  \end{subfigure}\hfill
+
+  \caption{Here we go through gamma values [1-100] and plot out the $\Phi$ values. We observe the desired behavior and approach the theoretical limit very fast, thanks to the high  $\tau = 5.0$. Note the different $\sigma$ and $\omega$ values for each plot, which are mainly for confirmation.}
+  \label{fig:gamma1}
+\end{figure}
+\begin{figure}
+  \centering
+    \begin{subfigure}{0.9\linewidth}
+    \includegraphics[width=\linewidth]{gamma/gamma_vs_phi_sigmaomega_3.png}
+    \caption{}\label{fig:ghtau6}
+  \end{subfigure}\hfill
+  \begin{subfigure}{0.9\linewidth}
+    \includegraphics[width=\linewidth]{gamma/gamma_vs_phi_sigmaomega_1.png}
+    \caption{}\label{fig:ghtau4}
+  \end{subfigure}\hfill
+  \begin{subfigure}{0.9\linewidth}
+    \includegraphics[width=\linewidth]{gamma/gamma_vs_phi_sigmaomega_2.png}
+    \caption{}\label{fig:ghtau5}
+  \end{subfigure}\hfill
+
+  \caption{Here we go through gamma values [1-100] and plot out the $\Phi$ values but approach the theoretical limit slower than the $\tau = 5.0$ case, since here $\tau = 1.0$. This is a pattern we will later see again.}
+  \label{fig:gamma2}
+\end{figure}
+
+Figures \ref{fig:gamma1} and \ref{fig:gamma2} show that the numerical simulation gets within the theoretical limit with each parameter set. The other pattern we observe is that there might be a positive correlation with $\tau$ and $\Phi$. 
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}{0.9\linewidth}
+    \includegraphics[width=\linewidth]{phivstau/phi_vs_tau_1.png}
+    \caption{}\label{fig:phivtau1}
+  \end{subfigure}\hfill
+  \begin{subfigure}{0.9\linewidth}
+    \includegraphics[width=\linewidth]{phivstau/phi_vs_tau_2.png}
+    \caption{}\label{fig:phivtau2}
+  \end{subfigure}\hfill
+  \begin{subfigure}{0.9\linewidth}
+    \includegraphics[width=\linewidth]{phivstau/phi_vs_tau_3.png}
+    \caption{}\label{fig:phivtau3}
+  \end{subfigure}\hfill
+  \caption{Here we sweep through $\tau$ values between 1.0- 100.0 and see both how increasing $\tau$ leads to increasing $\Phi$. The interesting point is that we arrive at the same theoretical ceiling as before, without setting $\gamma \to \infty$, $\gamma = 1.0$ throughout a, b, c. The physical parameters determine the limit again.}
+  \label{fig:phivtaugrid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}{0.9\linewidth}
+    \includegraphics[width=\linewidth]{N/length_vs_phi_1.png}
+    \caption{}\label{fig:Nvsphi1}
+  \end{subfigure}\hfill
+  \begin{subfigure}{0.9\linewidth}
+    \includegraphics[width=\linewidth]{N/length_vs_phi_2.png}
+    \caption{}\label{fig:Nvsphi2}
+  \end{subfigure}\hfill
+  \caption{Here we go through N values from 200 to 80000. I split the plots so that the latter part is clearer to the eye, and we can see that the $\Phi$ value stabilizes around $N=10000$}
+  \label{fig:Nvsphigrid}
+\end{figure}
+
+Looking at the FIG. \ref{fig:phivtaugrid} shows that we reach the same theoretical limits as in FIG. \ref{fig:gamma1}-\ref{fig:gamma2} when we check for the same $\omega$ and $\sigma$ values. This reveals that $\tau$ and $\gamma$ can lead to an increase in $\Phi$ up to a point determined by $\omega$ and $\sigma$ values. Lastly, the relationship between the tape's length and $\Phi$ can also be seen in FIG. \ref{fig:Nvsphigrid}, which is kind of expected and does not show any reason to go for a bigger $N$ than 10000. However, I chose a smaller $N=4000$ and sacrificed accuracy for speed, as the main aim of this section was primarily to observe patterns.
+
+\subsection{Stacked Demons: Increasing $K$ vs Increasing $\tau$}
+The two-state model makes it clear that increasing $\tau$ (or pushing $\gamma$ large) drives the demon closer to its parameter-determined ceiling, but at a physical cost: a larger $\tau$ corresponds to a slower tape, since each bit must remain coupled to the demon for longer.
+
+An alternative is to place multiple identical demons in series along the tape's path. In this ``stacked'' design, each bit interacts with demon 1 for time $\tau$, then demon 2 for time $\tau$, and so on, for a total of $K$ demons. The tape does not need to slow down; instead, the physical device becomes longer. Operationally this realizes an effective interaction time $\tau_{\mathrm{eff}} \approx K\tau$ without requiring a single demon to hold the same bit longer.
+
+FIG.~\ref{fig:stackedKvsTau} compares the information current for a single demon with interaction time $\tau_{\mathrm{eff}}$ to the stacked case with fixed per-demon $\tau$. The close agreement shows that increasing $K$ reproduces the same trend as increasing $\tau$.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{images/stacked_k_vs_tau.png}
+  \caption{Comparison of increasing $\tau$ for a single demon (circles) versus stacking $K$ demons with fixed per-demon interaction time (squares), plotted against the effective interaction time $\tau_{\mathrm{eff}}=K\tau$. For the same effective exposure, stacking reproduces the performance gain of longer interaction windows without explicitly slowing the tape.}
+  \label{fig:stackedKvsTau}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\linewidth]{images/phi_vs_K_stacked.png}
+  \caption{Information current $\Phi$ increases with the number of stacked demons $K$ at fixed per-demon interaction time $\tau$. This offers a route to higher $\Phi$ by spatially extending the device rather than reducing tape speed.}
+  \label{fig:phiVsKStacked}
+\end{figure}
+
+To conclude this section, although varying $\tau$ and $\gamma$ reveals how the two-state demon approaches its ceiling, meaningful performance improvements at fixed reservoir parameters motivate redesigns of the architecture. Stacking is one such redesign that preserves the same microscopic rules while changing the physical realization.
+ 
+\section{n-State Demon: Generalization to Energy Ladders}
+\label{sec:n_state}
+
+The two-state demon has only one energy quantum $\Delta E$ to mediate the transition. A natural question is: would a demon with a different internal structure—more energy levels—perform better? Can we get a system that gets as close to a perfect refrigerator as physically can?
+
+
+We can generalize the demon to $n$ states arranged on an energy ladder: $E_0 < E_1 < \cdots < E_{n-1}$ with spacing $\Delta E_k = E_{k+1} - E_k$.  The joint system now has $2n$ states. The key design choice is how to couple the ladder to bit flips. Generalizing the previous interactions fits our needs: a cooperative transition flips the bit from $0$ to $1$, i.e., $(b=0, s_k) \leftrightarrow (b=1, s_{k+1})$ for $k = 0, \ldots, n-2$. This preserves the rectification structure: you cannot flip to a $1$ bit without raising the demon's energy, and you cannot flip to a $0$ bit without lowering it.
+
+
+The hot and cold transition channels become:
+
+Hot channel: Transitions $s_i \leftrightarrow s_j$ within each bit sector ($b=0$ or $b=1$) obey detailed balance at $T_H$:
+\begin{equation}
+\frac{R_{s_i \to s_{i+1}}}{R_{s_{i+1} \to s_i}} = e^{-\beta_H (E_{i+1} - E_i)}.
+\label{eq:firt}
+\end{equation}
+ I use the same parametrization as before: $R_{s_k \to s_{k+1}} = \gamma(1 - \sigma_k)$ and $R_{s_{k+1} \to s_k} = \gamma(1 + \sigma_k)$, where now $\sigma_k = \tanh(\beta_H \Delta E_k/2)$ depends on the local spacing.
+
+Cold channel: Cooperative transitions $(b=0, s_k) \leftrightarrow (b=1, s_{k+1})$ obey detailed balance at $T_C$:
+\begin{equation}
+\frac{R_{0s_k \to 1s_{k+1}}}{R_{1s_{k+1} \to 0s_k}} = e^{-\beta_C \Delta E_k},
+\label{eq:secnt}
+\end{equation}
+parametrized as $R_{0s_k \to 1s_{k+1}} = 1 - \omega_k$ and $R_{1s_{k+1} \to 0s_k} = 1 + \omega_k$ with $\omega_k = \tanh(\beta_C \Delta E_k/2)$.
+
+For a uniform ladder ($\Delta E_k = \Delta E/(n-1)$ for all $k$), the parameters $\sigma_k$ and $\omega_k$ become constant, recovering the two-state $\epsilon = (\omega - \sigma)/(1 - \omega\sigma)$ as the effective asymmetry. Note that plots below will not have $\sigma_k$ and $\omega_k$. The modified Clausius inequality \eqref{eq:second_law} continues to hold, though the functional form of $\eta$  now depends on $N$ and the ladder profile, and may be unattainable.
+
+\subsection{Numerical Implementation}
+
+We can reuse the previous SSA method by tracking the $2N$-state joint system and its corresponding transition rates in equations \ref{eq:firt} and \ref{eq:secnt}.
+
+
+\subsubsection{Results: Number of Demon States vs $\Phi$}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{demonn/Demon_Result.png}
+    \caption{Here we have $\omega=0.7$, $\sigma=0.2$. $\tau = 10.0$ to hit the aforementioned limit earlier. We see a clear rise in $\Phi$ as we increase the size of the energy ladder.}
+    \label{fig:demonRes}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{demonn/demon_n_vs_phi_2.png}
+    \caption{For this one, we continue to increase the size of the ladder, but not much change happens after $n=20$.}
+    \label{fig:demonRes2}
+\end{figure}
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.75\linewidth]{demonn/Low_DeltaE.png}
+  \caption{A low-$\Delta E$ ladder example computed by holding $T_H$ and $T_C$ fixed while shrinking the per-rung energy spacing. This changes the underlying dimensionless biases $\sigma_k$ and $\omega_k$ (because $\tanh(\beta\Delta E_k/2)$ depends on $\Delta E_k$), and therefore must be interpreted as a different physical parameter regime rather than a direct ``same-$\sigma,\omega$'' comparison.}
+  \label{fig:lowdeltaE}
+\end{figure}
+
+At this point, it becomes important to be explicit about what is meant by ``keeping the parameters the same'' in an $n$-state ladder. One can either (i) hold reservoir temperatures $T_H,T_C$ fixed while changing the per-rung energy spacing $\Delta E_k$, or (ii) hold the \,dimensionless\, transition biases---the quantities that directly enter the rates---fixed for each rung.
+
+Option (i) is physically natural if one insists on the same reservoirs, but it also changes $\sigma_k=\tanh(\beta_H\Delta E_k/2)$ and $\omega_k=\tanh(\beta_C\Delta E_k/2)$ as the ladder is refined, which can obscure comparisons across $n$.
+
+Option (ii) keeps $\sigma$ and $\omega$ fixed \,per rung\,, so that each adjacent transition is parameterized the same way as the two-state demon. In that case the ladder extension is a structural change rather than a hidden change of thermal bias. FIG.~\ref{fig:nSigmaOmega} shows $\Phi$ versus $n$ under this ``fixed-$\sigma,\omega$ per rung'' convention.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\linewidth]{images/n_state_phi_vs_n_sigmaomega.png}
+  \caption{$\Phi$ versus number of demon states $n$ for a laddered demon where each rung uses the same dimensionless transition biases ($\sigma$ and $\omega$) as the baseline two-state case. This isolates the effect of enlarging the state space from the separate effect of changing $\tanh(\beta\Delta E/2)$ by shrinking energy spacings at fixed temperatures.}
+  \label{fig:nSigmaOmega}
+\end{figure}
+
+Taken together, these viewpoints clarify why $\Delta E$ requires care in discussion: in an $n$-state ladder there is a distinction between a per-rung energy gap and the overall energy span of the ladder. What matters for rates---and thus for $\Phi$---is how those gaps enter the dimensionless combinations $\beta_H\Delta E_k$ and $\beta_C\Delta E_k$.
+
+\section{Two-Bit Interacting Demon}
+\label{sec:two_bit}
+
+The original Maxwell refrigerator processes bits independently: the demon couples to a single bit and the only ``memory'' effect across time is the demon's own internal state. A natural extension is to allow the demon to couple to \emph{pairs} of bits. This generalization is motivated by two considerations. First, it introduces a minimal notion of structured input beyond a simple bias, because the incoming tape can carry correlations. Second, it allows cooperative transitions that can create or destroy those correlations while still respecting detailed balance with the reservoirs.
+
+In the two-bit model used here, the demon remains a two-state system ($u/d$), but the tape is processed in adjacent pairs ($00,01,10,11$). Intrinsic transitions $u\leftrightarrow d$ exchange energy with the hot bath as before. Cooperative transitions now involve joint changes of the demon state and the current bit-pair, and are constructed to satisfy detailed balance with the cold bath. A key qualitative difference is that the demon can modify the pair distribution in ways that are invisible to single-bit statistics.
+
+\subsection{Results}
+FIG.~\ref{fig:twoBitMetrics} compares the two-bit demon to the single-bit demon on the same initial tape. Besides the information current $\Phi$ and the tape entropy change $\Delta S_B$, we track the change in pair correlation and the change in mutual information between the two bits in each pair. These quantities quantify the demon's ability to write \emph{structured} information to the tape.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{images/two_bit_metrics_comparison.png}
+  \caption{Two-bit demon versus single-bit demon on the same initial tape, comparing $\Phi$, the tape entropy change $\Delta S_B$, the change in pair correlation, and the change in pair mutual information. The two-bit demon can reshape correlations while still producing a net information current.}
+  \label{fig:twoBitMetrics}
+\end{figure}
+
+To connect these effects to thermodynamics, FIG.~\ref{fig:twoBitThermo} compares reservoir energy and entropy exchanges. The total entropy production remains non-negative in these runs, consistent with the second law once the tape's Shannon entropy change is included.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{images/two_bit_thermo_comparison.png}
+  \caption{Thermodynamic comparison between two-bit and single-bit demons at the same parameters. We show the heat exchanged with the reservoirs and the total entropy production, emphasizing that structured tape updates remain constrained by the same information-thermodynamics balance.}
+  \label{fig:twoBitThermo}
+\end{figure}
+
+Finally, FIG.~\ref{fig:twoBitEntropySweep} sweeps the input bias (equivalently the input tape entropy) and compares the resulting information current. In regimes where the input is highly structured (very low entropy), a two-bit interaction rule can produce behavior distinct from the single-bit case, highlighting that ``fuel'' on the tape can be stored not only as bias but also as correlations.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{images/two_bit_input_entropy_sweep.png}
+  \caption{Information current $\Phi$ as a function of the incoming tape entropy (sweeping $p_0$). The two-bit demon differs from the single-bit demon because it can exploit (and generate) structure at the pair level rather than only responding to single-bit bias.}
+  \label{fig:twoBitEntropySweep}
+\end{figure}
+
+
+\section{Conclusion}
+\label{sec:conclusion}
+We reproduced the behavior of Mandal \emph{et al.}\ \cite{mandal2013refrigerator} using a Gillespie simulation. The numerical phase diagrams match the exact solution, a sign that the modified Clausius bound is respected and that the implementation is consistent with the analytic results. We also verified the fast–demon limiting form
+\begin{equation}
+  \Phi=\frac{\delta-\epsilon}{2}\left[1-e^{-(1-\sigma\omega)\tau}\right],
+\end{equation}
+and observed that increasing either \(\gamma\) or \(\tau\) raises \(\Phi\) only up to a ceiling fixed by \(\sigma\) and \(\omega\). Testing on $N$(tape length) showed that moderate tape lengths are sufficient for stable estimates of \(\Phi\).
+
+Generalizing the demon to an \(n\)-level energy ladder can boost \(\Phi\) by providing additional pathways for cooperative transitions. The quantitative comparison depends on what is held fixed as the ladder is refined (e.g., fixed temperatures versus fixed per-rung biases), but in either convention the same thermodynamic trade-off between heat flow and information processing persists: refrigeration \((Q_{c\to h}>0)\) should be accompanied by writing information, while erasure requires heat to flow down the gradient.
+
+Overall, the extended models provide concrete routes to stronger autonomous refrigeration at fixed reservoirs: (i) stacking $K$ demons to realize an effective longer interaction without slowing the tape, (ii) enlarging the internal state space via energy ladders while being explicit about whether one holds temperatures or dimensionless biases fixed, and (iii) allowing multi-bit interactions to harness (and modify) correlations as an additional informational resource.
+
+
+\bibliographystyle{unsrt}
+\bibliography{refs}
+\appendix
+\section{Code}\label{app:deriv}
+All code and plotting scripts used to generate the figures in this report are included with the submission under the \texttt{final-report/} directory. In particular, the implementations are organized under \texttt{final-report/code/} (two-state, stacked, $n$-state, and two-bit interacting demons) and the reproducible figure-generation scripts are under \texttt{final-report/scripts/}.
+\end{document}

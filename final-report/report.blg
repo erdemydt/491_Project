@@ -1,0 +1,52 @@
+This is BibTeX, Version 0.99d (TeX Live 2024)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: report.aux
+The style file: unsrt.bst
+Database file #1: reportNotes.bib
+Warning--entry type for "Note1" isn't style-file defined
+--line 1 of file reportNotes.bib
+Warning--entry type for "Note2" isn't style-file defined
+--line 2 of file reportNotes.bib
+Database file #2: refs.bib
+You've used 8 entries,
+            1791 wiz_defined-function locations,
+            493 strings with 4658 characters,
+and the built_in function-call counts, 1299 in all, are:
+= -- 107
+> -- 37
+< -- 0
++ -- 17
+- -- 9
+* -- 67
+:= -- 200
+add.period$ -- 20
+call.type$ -- 8
+change.case$ -- 4
+chr.to.int$ -- 0
+cite$ -- 8
+duplicate$ -- 66
+empty$ -- 160
+format.name$ -- 9
+if$ -- 295
+int.to.chr$ -- 0
+int.to.str$ -- 8
+missing$ -- 8
+newline$ -- 39
+num.names$ -- 6
+pop$ -- 34
+preamble$ -- 1
+purify$ -- 0
+quote$ -- 0
+skip$ -- 29
+stack$ -- 0
+substring$ -- 61
+swap$ -- 8
+text.length$ -- 0
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 0
+warning$ -- 0
+while$ -- 11
+width$ -- 9
+write$ -- 78
+(There were 2 warnings)
