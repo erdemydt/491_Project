@@ -7,8 +7,7 @@ Dibyendu Mandal, H.~T. Quan, and Christopher Jarzynski.
 
 \bibitem{leff2003maxwell}
 H.~S. Leff and A.~F. Rex.
-\newblock {\em Maxwell's Demon 2: Entropy, Classical and Quantum Information,
-  Computing}.
+\newblock {\em Maxwell's Demon 2: Entropy, Classical and Quantum Information, Computing}.
 \newblock Institute of Physics Publishing, Bristol, 2003.
 
 \bibitem{maxwell1871theory}
@@ -18,8 +17,7 @@ J.~C. Maxwell.
 
 \bibitem{szilard1929}
 L.~Szilard.
-\newblock \"uber die entropieverminderung in einem thermodynamischen system bei
-  eingriffen intelligenter wesen.
+\newblock \"uber die entropieverminderung in einem thermodynamischen system bei eingriffen intelligenter wesen.
 \newblock {\em Z. Phys.}, 53:840, 1929.
 
 \bibitem{landauer1961}
@@ -29,15 +27,11 @@ R.~Landauer.
 
 \bibitem{gillespie1976}
 Daniel~T. Gillespie.
-\newblock A general method for numerically simulating the stochastic time
-  evolution of coupled chemical reactions.
+\newblock A general method for numerically simulating the stochastic time evolution of coupled chemical reactions.
 \newblock {\em J. Comput. Phys.}, 22(4):403--434, 1976.
 
 \bibitem{Note1}
-Initially, I attempted to simulate multiple extremely small $dt$ windows at
-  each $\tau $; however, this proved to be less reliable and significantly more
-  computationally expensive. As such, I decided to only use the Gillespie
-  Method going forward.
+Initially, I attempted to simulate multiple extremely small $dt$ windows at each $\tau $; however, this proved to be less reliable and significantly more computationally expensive. As such, I decided to only use the Gillespie Method going forward.
 
 \bibitem{Note2}
 Throughout this section, $n=2$ denotes the number of internal demon states.

@@ -1,4 +1,4 @@
-\documentclass[aps,twocolumn]{revtex4-2}
+\documentclass[aps]{revtex4-2}
 \usepackage[margin=1in]{geometry}
 \usepackage{graphicx}
 \usepackage{amsmath, amssymb}
@@ -30,13 +30,13 @@
 \usepackage{float}
 \begin{document}
 
-	itle{Final Report: An Extended Maxwell's Refrigerator }
+  itle{Final Report: An Extended Maxwell's Refrigerator }
 \author{Erdem Pülat}
 \affiliation{Bilkent University, Department of Physics}
 \date{\today}
 
 \begin{abstract}
-This report documents my reproduction and extension of the autonomous Maxwell demon model by Mandal \emph{et al.}\cite{mandal2013refrigerator}, a minimal device that rectifies thermal transitions while processing information on a moving tape. First, the original two-state ``Maxwell refrigerator'' is numerically reproduced using a Gillespie simulation, and its known limits and phase behavior are recovered. Second, I demonstrate an alternative route to stronger refrigeration without slowing the tape: stacking multiple demons in series, where increasing the number of demons $K$ mimics increasing the interaction time $\tau$ for a single demon. Third, the framework is generalized to demons with $n>2$ internal states arranged as energy ladders, clarifying how model choices about energy scales and transition parametrizations affect the interpretation of $\Delta E$. Finally, I introduce a two-bit interacting demon that processes bit-pairs and can actively reshape correlations on the tape, extending the information-thermodynamics interplay beyond independent bits.
+This report documents my reproduction and extension of the autonomous Maxwell demon model by Mandal \emph{et al.}\cite{mandal2013refrigerator}, a minimal device that rectifies thermal transitions while processing information on a moving tape. First, the original two-state ``Maxwell refrigerator'' is numerically reproduced using a Gillespie simulation, and its known limits and phase behavior are inspected. Then, we go on to demonstrate an alternative way of refrigeration without slowing the tape: stacking multiple demons in series, where increasing the number of demons  mimics increasing the interaction time for a single demon. Afterward, the framework is generalized to demons with $n>2$ internal states arranged as energy ladders, clarifying how model choices about energy scales and transition parameters affect the interpretation of $\Delta E$. Finally, a two-bit interacting demon that processes bit-pairs and can actively reshape correlations on the tape is introduced, extending the information-thermodynamics interplay beyond independent bits to correlated bits.
 \end{abstract}
 \maketitle
 
@@ -46,7 +46,7 @@ This report documents my reproduction and extension of the autonomous Maxwell de
 \section{Introduction}
 \label{sec:intro}
 
-In a 1871 thought experiment, Maxwell imagined a ``neat-fingered being'' that had such information about the system that it could sort gas molecules by speed, creating a temperature difference between two chambers without work \cite{leff2003maxwell}. This paradox—a seeming violation of the second law of thermodynamics on the surface—is, in truth, a wonderful thought experiment that connects information and entropy. Any physical device performing such sorting must process and store information about molecular states. The process of writing this information to any sort of memory increases the Shannon entropy of the memory, compensating for the decrease in thermodynamic entropy from the heat flow. Thus, we arrive at a balance, and the total entropy is again ever-increasing.
+In a 1871 thought experiment, Maxwell imagined a ``neat-fingered being'' that had such information about the system that it could sort gas molecules by speed, creating a temperature difference between two chambers without work \cite{leff2003maxwell}. This paradox—a seeming violation of the second law of thermodynamics on the surface—is, in truth, a wonderful thought experiment that connects information and entropy. Any physical device performing such sorting must process and store information about molecular states. The process of writing this information to any sort of memory increases the Shannon entropy of the memory, compensating for the decrease in thermodynamic entropy in other places. Thus, we arrive at a balance, and the total entropy is still ever-increasing.
 
 'Maxwell's demon' can mean any setup that uses microscopic fluctuations to lower thermodynamic entropy\cite{maxwell1871theory,szilard1929}. These models/mechanisms obey the second law if the device is also "writing" information to a memory: the rise in information (Shannon) entropy offsets the thermodynamic entropy drop. If that information is later erased, Landauer's principle says that thermodynamic entropy must increase elsewhere\cite{landauer1961}. Counting Shannon and Clausius entropies together ensures that the system obeys the second law as long as their sum remains constant or decreases. It is essential to note that this approach links information entropy to the second law of thermodynamics.
 
@@ -59,7 +59,7 @@ Mandal \emph{et al.} \cite{mandal2013refrigerator} made this abstract principle 
     \label{fig:demondesign}
 \end{figure}
 
-The present work has three objectives: (i) to examine the model's parameters and behavior and ensure that a numerical implementation conforms to the analytic results, (ii) to explore extensions that improve performance without altering the reservoir temperatures---in particular stacking demons and enlarging the internal state space---and (iii) to study a two-bit interacting variant in which the demon can modify not only the tape bias but also correlations.
+My work has three objectives: (i) to examine the model's parameters and behavior and ensure that a numerical implementation conforms to the analytic results, (ii) to explore extensions that improve performance without altering the reservoir temperatures---in particular stacking demons and enlarging the internal state space---and (iii) to study a two-bit interacting variant in which the demon can modify not only the tape bias but also correlations.
 
 \section{Two-State Demon: Reproduction of the Maxwell's Refrigerator}
 \label{sec:two_state}
@@ -70,11 +70,11 @@ The demon is a two-state system with states $u$ (up) and $d$ (down) separated by
 
  The demon can change its internal state in two ways. It can flip between $u$ and $d$ by absorbing or emitting energy $\Delta E$ to the hot bath, called``intrinsic'' transitions. If the demon is in state $d$ and the current bit shows $0$, they can also together transition to $1u$: the bit flips to $1$ and the demon jumps to $u$, with the energy $\Delta E$ coming from the cold bath. The reverse ($1u \to 0d$) is also possible, returning energy to the cold bath. Importantly, no other cooperative transitions are allowed—you cannot go from $0u$ to $1d$\cite{mandal2013refrigerator}.
 
-This restricted coupling creates a rectification effect. Consider an incoming tape with mostly $0$ bits. When the demon encounters a $0$, there's a chance to execute $0d \to 1u$, drawing energy $\Delta E$ from the cold bath. The demon might then go back to $d$ via the hot channel, dumping $\Delta E$ into the hot bath, as such energy flows from cold to hot, with the outgoing tape showing more $1$ bits as a record/result of this process. The incoming bias (excess of $0$'s) is similar to a thermodynamic ``fuel'' that enables refrigeration.
+This restricted coupling creates a rectification effect. Consider an incoming tape with mostly $0$ bits. When the demon encounters a $0$, there's a chance to execute a $0d \to 1u$ transition, drawing energy $\Delta E$ from the cold bath. The demon might then go back to state $d$ via the hot channel, dumping $\Delta E$ into the hot bath, as such energy flows from cold to hot, with the outgoing tape showing more $1$ bits as a record/result of this process. The incoming bias (excess of $0$'s) is similar to a thermodynamic ``fuel'' that enables refrigeration.
 
 \subsection{Transition Rates and Detailed Balance}
 
-To make this quantitative, we assign rates to all allowed transitions. The hot-channel transitions must satisfy:
+To make this quantitative, we assign rates to all allowed transitions, with respect to the detailed balance condition. The hot-channel transitions must satisfy:
 \begin{equation}
 \frac{R_{d\to u}}{R_{u\to d}} = e^{-\beta_H \Delta E}, \quad \text{where} \quad \beta_H = \frac{1}{k_B T_H}.
 \end{equation}
@@ -106,12 +106,12 @@ R_{0d\to 1u} = 1-\omega, \quad R_{1u\to 0d} = 1+\omega.
 \cite{mandal2013refrigerator}
 
 
-The temperature difference determines which bath ``wins'' the tug-of-war. Mandal \emph{et al.} showed that 
+The temperature difference determines which bath ``wins'' the tug-of-war to push either $0d \to 1u$ or $1u \to 0d$. Mandal \emph{et al.} introduces 
 \begin{equation}
 \epsilon = \frac{\omega - \sigma}{1 - \omega\sigma} = \tanh\left[\frac{(\beta_C - \beta_H)\Delta E}{2}\right]
 \label{eq:epsilon}
 \end{equation}
-represents the temperature difference, and we will later see that this number will set a limit for the output tape bias.
+which represents the temperature difference, and we will later see that this variable will set a limit for the output tape bias.
 
 \subsection{Information Current and Heat Flow}
 
@@ -321,8 +321,8 @@ FIG.~\ref{fig:stackedKvsTau} compares the information current for a single demon
   \label{fig:phiVsKStacked}
 \end{figure}
 
-To conclude this section, although varying $\tau$ and $\gamma$ reveals how the two-state demon approaches its ceiling, meaningful performance improvements at fixed reservoir parameters motivate redesigns of the architecture. Stacking is one such redesign that preserves the same microscopic rules while changing the physical realization.
- 
+To conclude this section, varying $\tau$ and $\gamma$ is important to show how the two-state demon approaches its ceiling but redesigns of the architecture is also important to explore in terms of performance, and is also fun. Stacking is one such redesign that preserves the rules with a trivial addition.
+  
 \section{n-State Demon: Generalization to Energy Ladders}
 \label{sec:n_state}
 
@@ -370,37 +370,72 @@ We can reuse the previous SSA method by tracking the $2N$-state joint system and
     \caption{For this one, we continue to increase the size of the ladder, but not much change happens after $n=20$.}
     \label{fig:demonRes2}
 \end{figure}
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=0.75\linewidth]{demonn/Low_DeltaE.png}
-  \caption{A low-$\Delta E$ ladder example computed by holding $T_H$ and $T_C$ fixed while shrinking the per-rung energy spacing. This changes the underlying dimensionless biases $\sigma_k$ and $\omega_k$ (because $\tanh(\beta\Delta E_k/2)$ depends on $\Delta E_k$), and therefore must be interpreted as a different physical parameter regime rather than a direct ``same-$\sigma,\omega$'' comparison.}
-  \label{fig:lowdeltaE}
-\end{figure}
+FIG.~\ref{fig:demonRes} and FIG.~\ref{fig:demonRes2} show that increasing the number of demon states $n$ leads to a higher information current $\Phi$, approaching closer to the perfect refrigerator limit of $\Phi = 1$. However, the returns diminish with larger $n$, and performance seems to plateau beyond $n \approx 20$.
 
-At this point, it becomes important to be explicit about what is meant by ``keeping the parameters the same'' in an $n$-state ladder. One can either (i) hold reservoir temperatures $T_H,T_C$ fixed while changing the per-rung energy spacing $\Delta E_k$, or (ii) hold the \,dimensionless\, transition biases---the quantities that directly enter the rates---fixed for each rung.
+At this point, it becomes important to be explicit about what is meant by ``keeping the parameters the same'' in an $n$-state ladder. One can either (i) hold reservoir temperatures $T_H,T_C$ fixed while changing the per-rung energy spacing $\Delta E_k$, or (ii) hold the \,dimensionless\, transition parameters---the quantities that directly enter the rates, $\sigma$ and $\omega$---fixed for each rung.
 
-Option (i) is physically natural if one insists on the same reservoirs, but it also changes $\sigma_k=\tanh(\beta_H\Delta E_k/2)$ and $\omega_k=\tanh(\beta_C\Delta E_k/2)$ as the ladder is refined, which can obscure comparisons across $n$.
+Option (i) is the one employed to produce plots FIG.~\ref{fig:demonRes} and FIG.~\ref{fig:demonRes2}. It is physically natural if one insists on the same reservoirs, but it also changes $\sigma_k=\tanh(\beta_H\Delta E_k/2)$ and $\omega_k=\tanh(\beta_C\Delta E_k/2)$ as the ladder is refined, because of a lower $\Delta E$. This lower $\Delta E$ means that each cooperative transition exchanges less energy with the cold bath, making it easier for the demon to drive $0 \to 1$ flips against the thermal gradient. Thus, part of the performance gain in FIG.~\ref{fig:demonRes} and FIG.~\ref{fig:demonRes2} comes from effectively reducing the thermal bias per rung as $n$ increases, and can be taken as inefficient as energy transfer per bit is much less than if we'd keep $\sigma$ and $\omega$ fixed.
 
-Option (ii) keeps $\sigma$ and $\omega$ fixed \,per rung\,, so that each adjacent transition is parameterized the same way as the two-state demon. In that case the ladder extension is a structural change rather than a hidden change of thermal bias. FIG.~\ref{fig:nSigmaOmega} shows $\Phi$ versus $n$ under this ``fixed-$\sigma,\omega$ per rung'' convention.
+Option (ii) keeps $\sigma$ and $\omega$ fixed \,per rung\,, so that each adjacent transition is parameterized the same way as the two-state demon. In that case the ladder extension is a structural change rather than a hidden change of thermal bias or $\Delta E$. FIG.~\ref{fig:nSigmaOmega} shows $\Phi$ versus $n$ under this ``fixed-$\sigma,\omega$ per rung'' convention. Here, $\Delta E$ between states are constant for all demons, so increasing $n$ increases the overall energy span of the ladder. No performance gain is observed beyond $n=2$ in this case, indicating that simply enlarging the state space without changing the dimensionless transition biases does not help.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.85\linewidth]{images/n_state_phi_vs_n_sigmaomega.png}
-  \caption{$\Phi$ versus number of demon states $n$ for a laddered demon where each rung uses the same dimensionless transition biases ($\sigma$ and $\omega$) as the baseline two-state case. This isolates the effect of enlarging the state space from the separate effect of changing $\tanh(\beta\Delta E/2)$ by shrinking energy spacings at fixed temperatures.}
+  \caption{$\Phi$ versus number of demon states $n$ for a laddered demon where each ladder step uses the same dimensionless transition biases ($\sigma$ and $\omega$) as the baseline two-state case. This isolates the effect of enlarging the state space from the separate effect of changing $\Delta E$ by shrinking energy spacings at fixed temperatures.}
   \label{fig:nSigmaOmega}
 \end{figure}
 
-Taken together, these viewpoints clarify why $\Delta E$ requires care in discussion: in an $n$-state ladder there is a distinction between a per-rung energy gap and the overall energy span of the ladder. What matters for rates---and thus for $\Phi$---is how those gaps enter the dimensionless combinations $\beta_H\Delta E_k$ and $\beta_C\Delta E_k$.
+Taken together, these viewpoints clarify why $\Delta E$ requires care in our discussion: in an $n$-state ladder there is a distinction between a per-rung energy gap and the overall energy span of the ladder. What matters for rates---and thus for $\Phi$---is how those gaps enter the dimensionless combinations $\beta_H\Delta E_k$ and $\beta_C\Delta E_k$. And the result is that $\Delta E$ is the main factor that can affect performance, rather than simply enlarging the state space. However, this is not our aim, as mentioned before, we do not want to mess with physical parameters. Thus, enlarging the state space alone does not help much, and would be only helpful in the case of an infinitely long tape, which could refrigerate on and on.
 
 \section{Two-Bit Interacting Demon}
 \label{sec:two_bit}
 
-The original Maxwell refrigerator processes bits independently: the demon couples to a single bit and the only ``memory'' effect across time is the demon's own internal state. A natural extension is to allow the demon to couple to \emph{pairs} of bits. This generalization is motivated by two considerations. First, it introduces a minimal notion of structured input beyond a simple bias, because the incoming tape can carry correlations. Second, it allows cooperative transitions that can create or destroy those correlations while still respecting detailed balance with the reservoirs.
+The original Maxwell refrigerator processes bits independently: the demon couples to a single bit and the only ``memory'' effect across time is the demon's own internal state. A natural extension is to allow the demon to couple to \emph{pairs} of bits. This generalization is motivated by two considerations. First, it introduces a minimal notion of structured input beyond a simple bias, because the incoming tape can carry correlations, two-bit correlations to be specific. Second, it allows cooperative transitions that can create or destroy those correlations while still respecting detailed balance with the reservoirs.
 
-In the two-bit model used here, the demon remains a two-state system ($u/d$), but the tape is processed in adjacent pairs ($00,01,10,11$). Intrinsic transitions $u\leftrightarrow d$ exchange energy with the hot bath as before. Cooperative transitions now involve joint changes of the demon state and the current bit-pair, and are constructed to satisfy detailed balance with the cold bath. A key qualitative difference is that the demon can modify the pair distribution in ways that are invisible to single-bit statistics.
+In the two-bit interacting model (TB-Demon) used here, the demon remains a two-state system ($u/d$), but the tape is processed in adjacent pairs ($00,01,10,11$). Intrinsic transitions $u\leftrightarrow d$ exchange energy with the hot bath as before. Cooperative transitions now involve joint changes of the demon state and the current bit-pair, and are constructed to satisfy detailed balance with the cold bath. A key difference is that the TB-demon can modify the pair distribution in ways that wouldn't be possible when interacting with one bit at a time.
+
+\subsection{Structure and Allowed Transitions}
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.6\linewidth]{demonn/two-bit-state-structure.png}
+  \caption{State diagram for the two-bit interacting demon. The demon has two internal states ($u$ and $d$) and couples to pairs of bits from the tape ($00,01,10,11$). Intrinsic transitions (solid arrows) flip the demon state without changing the bit-pair, while cooperative transitions (dashed arrows) change both the demon state and the bit-pair in a way that exchanges energy with the cold bath.}
+  \label{fig:twoBitDemonStates}
+  
+\end{figure}
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.6\linewidth]{demonn/two_bit_demon_design.png}
+  \caption{An overview of the two-bit interacting demon design. The demon interacts with pairs of bits from the tape, allowing it to modify correlations between bits while still exchanging energy with the thermal reservoirs.}
+  \label{fig:twoBitDemonStates}
+\end{figure}
+The two-bit interacting demon still has \emph{two} internal states, $u$ (up) and $d$ (down). The difference is in the tape: at each interaction window the demon couples to a \emph{pair} of adjacent bits, so the tape microstate for that window is one of $\{00,01,10,11\}$. The joint configuration space for a single interaction is therefore
+\[
+\{d00,d01,d10,d11,u00,u01,u10,u11\},
+\]
+eight states in total.
+
+As in the single-bit model, we have two types of transitions:
+Intrinsic transitions (hot bath): the demon flips without changing the bit-pair,
+\(uXY\leftrightarrow dXY\) for any \(XY\in\{00,01,10,11\}\).
+
+Cooperative transitions (cold bath): only specific coupled flips are allowed, namely
+\begin{align}
+  d00 &\leftrightarrow u01,\\
+  u10 &\leftrightarrow d11.
+\end{align}
+
+Here you'll notice that for the second cooperative transition flips, when the second bit of the pair goes from $0$ to $1$ the demon goes from $u$ to $d$, which is the opposite of any of the previous transitions. This is because we focus on the correlation impact rather than refrigiration now. 
+These cooperative moves make the structure concrete: the demon can only change the pair by flipping the second bit, and only in a demon-state-dependent way (from $00$ to $01$ when going $d\to u$, and from $10$ to $11$ when going $u\to d$). All other pair changes are forbidden, similar to the constraints of the original model and ensuring that heat exchange with the cold bath occurs only through these designated coupled transitions.
 
 \subsection{Results}
-FIG.~\ref{fig:twoBitMetrics} compares the two-bit demon to the single-bit demon on the same initial tape. Besides the information current $\Phi$ and the tape entropy change $\Delta S_B$, we track the change in pair correlation and the change in mutual information between the two bits in each pair. These quantities quantify the demon's ability to write \emph{structured} information to the tape.
+FIG.~\ref{fig:twoBitMetrics} compares the two-bit demon to the single-bit demon on the same initial tape. Besides the information current $\Phi$ and the tape entropy change $\Delta S_B$, we track the change in pair correlation and the change in mutual information between the two bits in each pair. These results show that the two-bit demmon's ability to interact with two-bit correlations make it so that the heat baths shape the two-bit correlations. As such, the demon cannot lower to a completely uncorrelated and random state, because the bath's gradient resists it. As a result, the original demon can reduce two-bit correlations more because the heat baths cannot resist it as they do not interact with two-bit correlations. FIG.~\ref{fig:twoBitDemonCorr} illustrates this effect by showing the evolution of pair correlations on a tape with strong initial two-bit correlations. The single-bit demon reduces these correlations more effectively than the two-bit demon, which is constrained by its interactions with the baths.
+
+\begin{figure}[H] 
+  \centering  
+  \includegraphics[width=.9\linewidth]{demonn/two-bit-comp-plot.png}
+  \caption{Here we have the most interesting case with an input tape that has a high level of two-bit correlations. We see here how we get the unexpected: one-bit demon reduces correlations more than the two-bit demon, as the two-bit demon's interactions with the baths resist correlation erasure.}
+  \label{fig:twoBitDemonCorr}
+\end{figure}
 
 \begin{figure}[H]
   \centering
@@ -430,20 +465,18 @@ Finally, FIG.~\ref{fig:twoBitEntropySweep} sweeps the input bias (equivalently t
 
 \section{Conclusion}
 \label{sec:conclusion}
-We reproduced the behavior of Mandal \emph{et al.}\ \cite{mandal2013refrigerator} using a Gillespie simulation. The numerical phase diagrams match the exact solution, a sign that the modified Clausius bound is respected and that the implementation is consistent with the analytic results. We also verified the fast–demon limiting form
-\begin{equation}
-  \Phi=\frac{\delta-\epsilon}{2}\left[1-e^{-(1-\sigma\omega)\tau}\right],
-\end{equation}
-and observed that increasing either \(\gamma\) or \(\tau\) raises \(\Phi\) only up to a ceiling fixed by \(\sigma\) and \(\omega\). Testing on $N$(tape length) showed that moderate tape lengths are sufficient for stable estimates of \(\Phi\).
+We reproduced the autonomous Maxwell refrigerator of Mandal \emph{et al.}~\cite{mandal2013refrigerator} with a Gillespie simulation and confirmed that the numerical results agree with the known analytic behavior across parameter sweeps. In particular, the phase structure and limiting trends are similar, and the simulations remain consistent with the expected information–thermodynamics balance.
 
-Generalizing the demon to an \(n\)-level energy ladder can boost \(\Phi\) by providing additional pathways for cooperative transitions. The quantitative comparison depends on what is held fixed as the ladder is refined (e.g., fixed temperatures versus fixed per-rung biases), but in either convention the same thermodynamic trade-off between heat flow and information processing persists: refrigeration \((Q_{c\to h}>0)\) should be accompanied by writing information, while erasure requires heat to flow down the gradient.
+We then explored routes to improved refrigeration performance without changing the reservoir temperatures. First, stacking multiple identical demons in series was shown to effectively mimic a longer interaction time while keeping the tape speed fixed, offering a practical architectural alternative to slowing the tape. Second, we generalized the demon to an energy-ladder internal structure and clarified that apparent performance gains depend sensitively on what is held fixed when increasing the number of states (physical energy gaps versus dimensionless transition parameters). This distinction is essential for interpreting improvements fairly.
 
-Overall, the extended models provide concrete routes to stronger autonomous refrigeration at fixed reservoirs: (i) stacking $K$ demons to realize an effective longer interaction without slowing the tape, (ii) enlarging the internal state space via energy ladders while being explicit about whether one holds temperatures or dimensionless biases fixed, and (iii) allowing multi-bit interactions to harness (and modify) correlations as an additional informational resource.
+Finally, we introduced a two-bit interacting demon that operates on bit pairs rather than independent bits. This extension demonstrates that the tape can store useful thermodynamic “fuel” not only as single-bit bias but also as correlations, and that the demon can actively reshape that structure while remaining constrained by the same second-law accounting once information changes on the tape are included.
+
+Overall, these extensions show that stronger autonomous refrigeration can be achieved either by redesigning the device architecture (stacking), or by enriching internal structure with careful parameter control (energy ladders).Broadening the informational resources available on the tape (multi-bit interactions) shows that whichever correlation the demon is deigned to interact with, will always contain information that will keep it from being in a random state.
 
 
 \bibliographystyle{unsrt}
 \bibliography{refs}
 \appendix
 \section{Code}\label{app:deriv}
-All code and plotting scripts used to generate the figures in this report are included with the submission under the \texttt{final-report/} directory. In particular, the implementations are organized under \texttt{final-report/code/} (two-state, stacked, $n$-state, and two-bit interacting demons) and the reproducible figure-generation scripts are under \texttt{final-report/scripts/}.
+All the code relevant to this project can be found at \href{https://github.com/erdemydt/491_Project}{link}; particularly in the final\_report folder. Simulation.py files could be and was used to generate a bunch of plots relevant to the topic.
 \end{document}

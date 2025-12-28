@@ -442,7 +442,7 @@ def compare_demons(tape_params: Dict, phys_params: PhysParams = None, tau: float
 
 def _plot_demon_comparison(comparison: Dict):
     """Plot comparison between two-bit and single-bit demons."""
-    fig, axes = plt.subplots(2, 3, figsize=(15, 7))
+    fig, axes = plt.subplots(2, 3, figsize=(12, 6), dpi=300)
     
     init_tape = comparison['initial_tape']
     two_bit_tape = comparison['two_bit']['final_tape']
@@ -584,7 +584,9 @@ Differences (2-Bit − 1-Bit):
         main_title = f'{main_title}\n{custom_title}'
     plt.suptitle(main_title, fontsize=14, fontweight='bold')
     plt.tight_layout()
-    plt.show()
+    # We want very high resolution for detailed text
+    plt.savefig('final-report/demonn/two-bit-comp-plot.png', dpi=300)
+    print("Saved figure: final-report/demonn/two-bit-comp-plot.png")
 
 
 def sweep_tau(tau_values: List[float], tape_params: Dict, phys_params: PhysParams = None,
@@ -1372,7 +1374,7 @@ if __name__ == "__main__":
         'pair_00_frac': 0.3,
         'pair_11_frac': 0.3
     }
-    #comparison2 = compare_demons(tape_params, phys_params, tau=50.0, seed=123, plot=True, two_bit_demon=custom_two_bit_demon,title="Demon 1")
+    comparison2 = compare_demons(tape_params, phys_params, tau=5.0, seed=123, plot=True, two_bit_demon=custom_two_bit_demon,title="Demon 1")
     tape_params = {
         'N': 20000, 
         'p0': 0.2,  # This won't be used much since we control pairs
@@ -1395,11 +1397,11 @@ if __name__ == "__main__":
     # Demo 5: Input entropy analysis (p0 from 0 to 0.5)
     print("\n5. Input entropy analysis: p0 from 0 to 0.5...")
     p0_values = np.linspace(0.5, 1.0, 20)  # 11 points from 0 to 0.5
-    results_entropy = sweep_p0_entropy_analysis_v2(
-        tape_size=4000,
-        tau=1.0,
-        phys_params=phys_params,
-        seed_base=100,
-        two_bit_demon=custom_two_bit_demon,
-        p0_values=p0_values
-    )
+    # results_entropy = sweep_p0_entropy_analysis_v2(
+    #     tape_size=4000,
+    #     tau=1.0,
+    #     phys_params=phys_params,
+    #     seed_base=100,
+    #     two_bit_demon=custom_two_bit_demon,
+    #     p0_values=p0_values
+    # )
